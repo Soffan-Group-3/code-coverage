@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsonTreeWriter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson.internal.bind</a> &gt; <span class="el_source">JsonTreeWriter.java</span></div><h1>JsonTreeWriter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2011 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.internal.bind;
+
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.stream.JsonWriter;
+import java.io.IOException;
+import java.io.Writer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/** This writer creates a JsonElement. */
+public final class JsonTreeWriter extends JsonWriter {
+<span class="fc" id="L34">  private static final Writer UNWRITABLE_WRITER =</span>
+<span class="fc" id="L35">      new Writer() {</span>
+        @Override
+        public void write(char[] buffer, int offset, int counter) {
+<span class="nc" id="L38">          throw new AssertionError();</span>
+        }
+
+        @Override
+        public void flush() {
+<span class="nc" id="L43">          throw new AssertionError();</span>
+        }
+
+        @Override
+        public void close() {
+<span class="nc" id="L48">          throw new AssertionError();</span>
+        }
+      };
+
+  /** Added to the top of the stack when this writer is closed to cause following ops to fail. */
+<span class="fc" id="L53">  private static final JsonPrimitive SENTINEL_CLOSED = new JsonPrimitive(&quot;closed&quot;);</span>
+
+  /** The JsonElements and JsonArrays under modification, outermost to innermost. */
+<span class="fc" id="L56">  private final List&lt;JsonElement&gt; stack = new ArrayList&lt;&gt;();</span>
+
+  /** The name for the next JSON object value. If non-null, the top of the stack is a JsonObject. */
+  private String pendingName;
+
+  /** the JSON element constructed by this writer. */
+<span class="fc" id="L62">  private JsonElement product = JsonNull.INSTANCE; // TODO: is this really what we want?;</span>
+
+  public JsonTreeWriter() {
+<span class="fc" id="L65">    super(UNWRITABLE_WRITER);</span>
+<span class="fc" id="L66">  }</span>
+
+  /** Returns the top level object produced by this writer. */
+  public JsonElement get() {
+<span class="pc bpc" id="L70" title="1 of 2 branches missed.">    if (!stack.isEmpty()) {</span>
+<span class="nc" id="L71">      throw new IllegalStateException(&quot;Expected one JSON element but was &quot; + stack);</span>
+    }
+<span class="fc" id="L73">    return product;</span>
+  }
+
+  private JsonElement peek() {
+<span class="fc" id="L77">    return stack.get(stack.size() - 1);</span>
+  }
+
+  private void put(JsonElement value) {
+<span class="fc bfc" id="L81" title="All 2 branches covered.">    if (pendingName != null) {</span>
+<span class="pc bpc" id="L82" title="1 of 4 branches missed.">      if (!value.isJsonNull() || getSerializeNulls()) {</span>
+<span class="fc" id="L83">        JsonObject object = (JsonObject) peek();</span>
+<span class="fc" id="L84">        object.add(pendingName, value);</span>
+      }
+<span class="fc" id="L86">      pendingName = null;</span>
+<span class="fc bfc" id="L87" title="All 2 branches covered.">    } else if (stack.isEmpty()) {</span>
+<span class="fc" id="L88">      product = value;</span>
+    } else {
+<span class="fc" id="L90">      JsonElement element = peek();</span>
+<span class="pc bpc" id="L91" title="1 of 2 branches missed.">      if (element instanceof JsonArray) {</span>
+<span class="fc" id="L92">        ((JsonArray) element).add(value);</span>
+      } else {
+<span class="nc" id="L94">        throw new IllegalStateException();</span>
+      }
+    }
+<span class="fc" id="L97">  }</span>
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter beginArray() throws IOException {
+<span class="fc" id="L102">    JsonArray array = new JsonArray();</span>
+<span class="fc" id="L103">    put(array);</span>
+<span class="fc" id="L104">    stack.add(array);</span>
+<span class="fc" id="L105">    return this;</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter endArray() throws IOException {
+<span class="pc bpc" id="L111" title="2 of 4 branches missed.">    if (stack.isEmpty() || pendingName != null) {</span>
+<span class="nc" id="L112">      throw new IllegalStateException();</span>
+    }
+<span class="fc" id="L114">    JsonElement element = peek();</span>
+<span class="pc bpc" id="L115" title="1 of 2 branches missed.">    if (element instanceof JsonArray) {</span>
+<span class="fc" id="L116">      stack.remove(stack.size() - 1);</span>
+<span class="fc" id="L117">      return this;</span>
+    }
+<span class="nc" id="L119">    throw new IllegalStateException();</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter beginObject() throws IOException {
+<span class="fc" id="L125">    JsonObject object = new JsonObject();</span>
+<span class="fc" id="L126">    put(object);</span>
+<span class="fc" id="L127">    stack.add(object);</span>
+<span class="fc" id="L128">    return this;</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter endObject() throws IOException {
+<span class="pc bpc" id="L134" title="2 of 4 branches missed.">    if (stack.isEmpty() || pendingName != null) {</span>
+<span class="nc" id="L135">      throw new IllegalStateException();</span>
+    }
+<span class="fc" id="L137">    JsonElement element = peek();</span>
+<span class="pc bpc" id="L138" title="1 of 2 branches missed.">    if (element instanceof JsonObject) {</span>
+<span class="fc" id="L139">      stack.remove(stack.size() - 1);</span>
+<span class="fc" id="L140">      return this;</span>
+    }
+<span class="nc" id="L142">    throw new IllegalStateException();</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter name(String name) throws IOException {
+<span class="fc" id="L148">    Objects.requireNonNull(name, &quot;name == null&quot;);</span>
+<span class="pc bpc" id="L149" title="2 of 4 branches missed.">    if (stack.isEmpty() || pendingName != null) {</span>
+<span class="nc" id="L150">      throw new IllegalStateException(&quot;Did not expect a name&quot;);</span>
+    }
+<span class="fc" id="L152">    JsonElement element = peek();</span>
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">    if (element instanceof JsonObject) {</span>
+<span class="fc" id="L154">      pendingName = name;</span>
+<span class="fc" id="L155">      return this;</span>
+    }
+<span class="nc" id="L157">    throw new IllegalStateException(&quot;Please begin an object before writing a name.&quot;);</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter value(String value) throws IOException {
+<span class="fc bfc" id="L163" title="All 2 branches covered.">    if (value == null) {</span>
+<span class="fc" id="L164">      return nullValue();</span>
+    }
+<span class="fc" id="L166">    put(new JsonPrimitive(value));</span>
+<span class="fc" id="L167">    return this;</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter value(boolean value) throws IOException {
+<span class="nc" id="L173">    put(new JsonPrimitive(value));</span>
+<span class="nc" id="L174">    return this;</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter value(Boolean value) throws IOException {
+<span class="pc bpc" id="L180" title="1 of 2 branches missed.">    if (value == null) {</span>
+<span class="nc" id="L181">      return nullValue();</span>
+    }
+<span class="fc" id="L183">    put(new JsonPrimitive(value));</span>
+<span class="fc" id="L184">    return this;</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter value(float value) throws IOException {
+<span class="nc bnc" id="L190" title="All 6 branches missed.">    if (!isLenient() &amp;&amp; (Float.isNaN(value) || Float.isInfinite(value))) {</span>
+<span class="nc" id="L191">      throw new IllegalArgumentException(&quot;JSON forbids NaN and infinities: &quot; + value);</span>
+    }
+<span class="nc" id="L193">    put(new JsonPrimitive(value));</span>
+<span class="nc" id="L194">    return this;</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter value(double value) throws IOException {
+<span class="nc bnc" id="L200" title="All 6 branches missed.">    if (!isLenient() &amp;&amp; (Double.isNaN(value) || Double.isInfinite(value))) {</span>
+<span class="nc" id="L201">      throw new IllegalArgumentException(&quot;JSON forbids NaN and infinities: &quot; + value);</span>
+    }
+<span class="nc" id="L203">    put(new JsonPrimitive(value));</span>
+<span class="nc" id="L204">    return this;</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter value(long value) throws IOException {
+<span class="fc" id="L210">    put(new JsonPrimitive(value));</span>
+<span class="fc" id="L211">    return this;</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter value(Number value) throws IOException {
+<span class="pc bpc" id="L217" title="1 of 2 branches missed.">    if (value == null) {</span>
+<span class="nc" id="L218">      return nullValue();</span>
+    }
+
+<span class="pc bpc" id="L221" title="1 of 2 branches missed.">    if (!isLenient()) {</span>
+<span class="nc" id="L222">      double d = value.doubleValue();</span>
+<span class="nc bnc" id="L223" title="All 4 branches missed.">      if (Double.isNaN(d) || Double.isInfinite(d)) {</span>
+<span class="nc" id="L224">        throw new IllegalArgumentException(&quot;JSON forbids NaN and infinities: &quot; + value);</span>
+      }
+    }
+
+<span class="fc" id="L228">    put(new JsonPrimitive(value));</span>
+<span class="fc" id="L229">    return this;</span>
+  }
+
+  @CanIgnoreReturnValue
+  @Override
+  public JsonWriter nullValue() throws IOException {
+<span class="fc" id="L235">    put(JsonNull.INSTANCE);</span>
+<span class="fc" id="L236">    return this;</span>
+  }
+
+  @Override
+  public JsonWriter jsonValue(String value) throws IOException {
+<span class="nc" id="L241">    throw new UnsupportedOperationException();</span>
+  }
+
+  @Override
+<span class="nc" id="L245">  public void flush() throws IOException {}</span>
+
+  @Override
+  public void close() throws IOException {
+<span class="nc bnc" id="L249" title="All 2 branches missed.">    if (!stack.isEmpty()) {</span>
+<span class="nc" id="L250">      throw new IOException(&quot;Incomplete document&quot;);</span>
+    }
+<span class="nc" id="L252">    stack.add(SENTINEL_CLOSED);</span>
+<span class="nc" id="L253">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsonElementTypeAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson.internal.bind</a> &gt; <span class="el_source">JsonElementTypeAdapter.java</span></div><h1>JsonElementTypeAdapter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2024 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.internal.bind;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.TypeAdapter;
+import com.google.gson.internal.LazilyParsedNumber;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
+import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
+
+/** Adapter for {@link JsonElement} and subclasses. */
+class JsonElementTypeAdapter extends TypeAdapter&lt;JsonElement&gt; {
+<span class="fc" id="L36">  static final JsonElementTypeAdapter ADAPTER = new JsonElementTypeAdapter();</span>
+
+  private JsonElementTypeAdapter() {}
+
+  /**
+   * Tries to begin reading a JSON array or JSON object, returning {@code null} if the next element
+   * is neither of those.
+   */
+  private JsonElement tryBeginNesting(JsonReader in, JsonToken peeked) throws IOException {
+<span class="fc bfc" id="L45" title="All 3 branches covered.">    switch (peeked) {</span>
+      case BEGIN_ARRAY:
+<span class="fc" id="L47">        in.beginArray();</span>
+<span class="fc" id="L48">        return new JsonArray();</span>
+      case BEGIN_OBJECT:
+<span class="fc" id="L50">        in.beginObject();</span>
+<span class="fc" id="L51">        return new JsonObject();</span>
+      default:
+<span class="fc" id="L53">        return null;</span>
+    }
+  }
+
+  /** Reads a {@link JsonElement} which cannot have any nested elements */
+  private JsonElement readTerminal(JsonReader in, JsonToken peeked) throws IOException {
+<span class="pc bpc" id="L59" title="1 of 5 branches missed.">    switch (peeked) {</span>
+      case STRING:
+<span class="fc" id="L61">        return new JsonPrimitive(in.nextString());</span>
+      case NUMBER:
+<span class="fc" id="L63">        String number = in.nextString();</span>
+<span class="fc" id="L64">        return new JsonPrimitive(new LazilyParsedNumber(number));</span>
+      case BOOLEAN:
+<span class="fc" id="L66">        return new JsonPrimitive(in.nextBoolean());</span>
+      case NULL:
+<span class="fc" id="L68">        in.nextNull();</span>
+<span class="fc" id="L69">        return JsonNull.INSTANCE;</span>
+      default:
+        // When read(JsonReader) is called with JsonReader in invalid state
+<span class="nc" id="L72">        throw new IllegalStateException(&quot;Unexpected token: &quot; + peeked);</span>
+    }
+  }
+
+  @Override
+  public JsonElement read(JsonReader in) throws IOException {
+    // Optimization if value already exists as JsonElement
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    if (in instanceof JsonTreeReader) {</span>
+<span class="fc" id="L80">      return ((JsonTreeReader) in).nextJsonElement();</span>
+    }
+
+    // Either JsonArray or JsonObject
+    JsonElement current;
+<span class="fc" id="L85">    JsonToken peeked = in.peek();</span>
+
+<span class="fc" id="L87">    current = tryBeginNesting(in, peeked);</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">    if (current == null) {</span>
+<span class="fc" id="L89">      return readTerminal(in, peeked);</span>
+    }
+
+<span class="fc" id="L92">    Deque&lt;JsonElement&gt; stack = new ArrayDeque&lt;&gt;();</span>
+
+    while (true) {
+<span class="fc bfc" id="L95" title="All 2 branches covered.">      while (in.hasNext()) {</span>
+<span class="fc" id="L96">        String name = null;</span>
+        // Name is only used for JSON object members
+<span class="fc bfc" id="L98" title="All 2 branches covered.">        if (current instanceof JsonObject) {</span>
+<span class="fc" id="L99">          name = in.nextName();</span>
+        }
+
+<span class="fc" id="L102">        peeked = in.peek();</span>
+<span class="fc" id="L103">        JsonElement value = tryBeginNesting(in, peeked);</span>
+<span class="fc bfc" id="L104" title="All 2 branches covered.">        boolean isNesting = value != null;</span>
+
+<span class="fc bfc" id="L106" title="All 2 branches covered.">        if (value == null) {</span>
+<span class="fc" id="L107">          value = readTerminal(in, peeked);</span>
+        }
+
+<span class="fc bfc" id="L110" title="All 2 branches covered.">        if (current instanceof JsonArray) {</span>
+<span class="fc" id="L111">          ((JsonArray) current).add(value);</span>
+        } else {
+<span class="fc" id="L113">          ((JsonObject) current).add(name, value);</span>
+        }
+
+<span class="fc bfc" id="L116" title="All 2 branches covered.">        if (isNesting) {</span>
+<span class="fc" id="L117">          stack.addLast(current);</span>
+<span class="fc" id="L118">          current = value;</span>
+        }
+<span class="fc" id="L120">      }</span>
+
+      // End current element
+<span class="fc bfc" id="L123" title="All 2 branches covered.">      if (current instanceof JsonArray) {</span>
+<span class="fc" id="L124">        in.endArray();</span>
+      } else {
+<span class="fc" id="L126">        in.endObject();</span>
+      }
+
+<span class="fc bfc" id="L129" title="All 2 branches covered.">      if (stack.isEmpty()) {</span>
+<span class="fc" id="L130">        return current;</span>
+      } else {
+        // Continue with enclosing element
+<span class="fc" id="L133">        current = stack.removeLast();</span>
+      }
+    }
+  }
+
+  @Override
+  public void write(JsonWriter out, JsonElement value) throws IOException {
+<span class="fc bfc" id="L140" title="All 4 branches covered.">    if (value == null || value.isJsonNull()) {</span>
+<span class="fc" id="L141">      out.nullValue();</span>
+<span class="fc bfc" id="L142" title="All 2 branches covered.">    } else if (value.isJsonPrimitive()) {</span>
+<span class="fc" id="L143">      JsonPrimitive primitive = value.getAsJsonPrimitive();</span>
+<span class="fc bfc" id="L144" title="All 2 branches covered.">      if (primitive.isNumber()) {</span>
+<span class="fc" id="L145">        out.value(primitive.getAsNumber());</span>
+<span class="fc bfc" id="L146" title="All 2 branches covered.">      } else if (primitive.isBoolean()) {</span>
+<span class="fc" id="L147">        out.value(primitive.getAsBoolean());</span>
+      } else {
+<span class="fc" id="L149">        out.value(primitive.getAsString());</span>
+      }
+
+<span class="fc bfc" id="L152" title="All 2 branches covered.">    } else if (value.isJsonArray()) {</span>
+<span class="fc" id="L153">      out.beginArray();</span>
+<span class="fc bfc" id="L154" title="All 2 branches covered.">      for (JsonElement e : value.getAsJsonArray()) {</span>
+<span class="fc" id="L155">        write(out, e);</span>
+<span class="fc" id="L156">      }</span>
+<span class="fc" id="L157">      out.endArray();</span>
+
+<span class="pc bpc" id="L159" title="1 of 2 branches missed.">    } else if (value.isJsonObject()) {</span>
+<span class="fc" id="L160">      out.beginObject();</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">      for (Map.Entry&lt;String, JsonElement&gt; e : value.getAsJsonObject().entrySet()) {</span>
+<span class="fc" id="L162">        out.name(e.getKey());</span>
+<span class="fc" id="L163">        write(out, e.getValue());</span>
+<span class="fc" id="L164">      }</span>
+<span class="fc" id="L165">      out.endObject();</span>
+
+    } else {
+<span class="nc" id="L168">      throw new IllegalArgumentException(&quot;Couldn't write &quot; + value.getClass());</span>
+    }
+<span class="fc" id="L170">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

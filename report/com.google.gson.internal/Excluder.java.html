@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Excluder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson.internal</a> &gt; <span class="el_source">Excluder.java</span></div><h1>Excluder.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2008 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.internal;
+
+import com.google.gson.ExclusionStrategy;
+import com.google.gson.FieldAttributes;
+import com.google.gson.Gson;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.annotations.Expose;
+import com.google.gson.annotations.Since;
+import com.google.gson.annotations.Until;
+import com.google.gson.internal.reflect.ReflectionHelper;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonWriter;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * This class selects which fields and types to omit. It is configurable, supporting version
+ * attributes {@link Since} and {@link Until}, modifiers, synthetic fields, anonymous and local
+ * classes, inner classes, and fields with the {@link Expose} annotation.
+ *
+ * &lt;p&gt;This class is a type adapter factory; types that are excluded will be adapted to null. It may
+ * delegate to another type adapter if only one direction is excluded.
+ *
+ * @author Joel Leitch
+ * @author Jesse Wilson
+ */
+<span class="fc" id="L49">public final class Excluder implements TypeAdapterFactory, Cloneable {</span>
+  private static final double IGNORE_VERSIONS = -1.0d;
+<span class="fc" id="L51">  public static final Excluder DEFAULT = new Excluder();</span>
+
+<span class="fc" id="L53">  private double version = IGNORE_VERSIONS;</span>
+<span class="fc" id="L54">  private int modifiers = Modifier.TRANSIENT | Modifier.STATIC;</span>
+<span class="fc" id="L55">  private boolean serializeInnerClasses = true;</span>
+  private boolean requireExpose;
+<span class="fc" id="L57">  private List&lt;ExclusionStrategy&gt; serializationStrategies = Collections.emptyList();</span>
+<span class="fc" id="L58">  private List&lt;ExclusionStrategy&gt; deserializationStrategies = Collections.emptyList();</span>
+
+  @Override
+  protected Excluder clone() {
+    try {
+<span class="fc" id="L63">      return (Excluder) super.clone();</span>
+<span class="nc" id="L64">    } catch (CloneNotSupportedException e) {</span>
+<span class="nc" id="L65">      throw new AssertionError(e);</span>
+    }
+  }
+
+  public Excluder withVersion(double ignoreVersionsAfter) {
+<span class="fc" id="L70">    Excluder result = clone();</span>
+<span class="fc" id="L71">    result.version = ignoreVersionsAfter;</span>
+<span class="fc" id="L72">    return result;</span>
+  }
+
+  public Excluder withModifiers(int... modifiers) {
+<span class="fc" id="L76">    Excluder result = clone();</span>
+<span class="fc" id="L77">    result.modifiers = 0;</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">    for (int modifier : modifiers) {</span>
+<span class="fc" id="L79">      result.modifiers |= modifier;</span>
+    }
+<span class="fc" id="L81">    return result;</span>
+  }
+
+  public Excluder disableInnerClassSerialization() {
+<span class="fc" id="L85">    Excluder result = clone();</span>
+<span class="fc" id="L86">    result.serializeInnerClasses = false;</span>
+<span class="fc" id="L87">    return result;</span>
+  }
+
+  public Excluder excludeFieldsWithoutExposeAnnotation() {
+<span class="fc" id="L91">    Excluder result = clone();</span>
+<span class="fc" id="L92">    result.requireExpose = true;</span>
+<span class="fc" id="L93">    return result;</span>
+  }
+
+  public Excluder withExclusionStrategy(
+      ExclusionStrategy exclusionStrategy, boolean serialization, boolean deserialization) {
+<span class="fc" id="L98">    Excluder result = clone();</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">    if (serialization) {</span>
+<span class="fc" id="L100">      result.serializationStrategies = new ArrayList&lt;&gt;(serializationStrategies);</span>
+<span class="fc" id="L101">      result.serializationStrategies.add(exclusionStrategy);</span>
+    }
+<span class="fc bfc" id="L103" title="All 2 branches covered.">    if (deserialization) {</span>
+<span class="fc" id="L104">      result.deserializationStrategies = new ArrayList&lt;&gt;(deserializationStrategies);</span>
+<span class="fc" id="L105">      result.deserializationStrategies.add(exclusionStrategy);</span>
+    }
+<span class="fc" id="L107">    return result;</span>
+  }
+
+  @Override
+  public &lt;T&gt; TypeAdapter&lt;T&gt; create(Gson gson, TypeToken&lt;T&gt; type) {
+<span class="fc" id="L112">    Class&lt;?&gt; rawType = type.getRawType();</span>
+
+<span class="fc" id="L114">    boolean skipSerialize = excludeClass(rawType, true);</span>
+<span class="fc" id="L115">    boolean skipDeserialize = excludeClass(rawType, false);</span>
+
+<span class="fc bfc" id="L117" title="All 4 branches covered.">    if (!skipSerialize &amp;&amp; !skipDeserialize) {</span>
+<span class="fc" id="L118">      return null;</span>
+    }
+
+<span class="fc" id="L121">    return new TypeAdapter&lt;T&gt;() {</span>
+      /**
+       * The delegate is lazily created because it may not be needed, and creating it may fail.
+       * Field has to be {@code volatile} because {@link Gson} guarantees to be thread-safe.
+       */
+      private volatile TypeAdapter&lt;T&gt; delegate;
+
+      @Override
+      public T read(JsonReader in) throws IOException {
+<span class="fc bfc" id="L130" title="All 2 branches covered.">        if (skipDeserialize) {</span>
+<span class="fc" id="L131">          in.skipValue();</span>
+<span class="fc" id="L132">          return null;</span>
+        }
+<span class="fc" id="L134">        return delegate().read(in);</span>
+      }
+
+      @Override
+      public void write(JsonWriter out, T value) throws IOException {
+<span class="fc bfc" id="L139" title="All 2 branches covered.">        if (skipSerialize) {</span>
+<span class="fc" id="L140">          out.nullValue();</span>
+<span class="fc" id="L141">          return;</span>
+        }
+<span class="fc" id="L143">        delegate().write(out, value);</span>
+<span class="fc" id="L144">      }</span>
+
+      private TypeAdapter&lt;T&gt; delegate() {
+        // A race might lead to `delegate` being assigned by multiple threads but the last
+        // assignment will stick
+<span class="fc" id="L149">        TypeAdapter&lt;T&gt; d = delegate;</span>
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">        return d != null ? d : (delegate = gson.getDelegateAdapter(Excluder.this, type));</span>
+      }
+    };
+  }
+
+  public boolean excludeField(Field field, boolean serialize) {
+<span class="fc bfc" id="L156" title="All 2 branches covered.">    if ((modifiers &amp; field.getModifiers()) != 0) {</span>
+<span class="fc" id="L157">      return true;</span>
+    }
+
+<span class="fc bfc" id="L160" title="All 2 branches covered.">    if (version != Excluder.IGNORE_VERSIONS</span>
+<span class="fc bfc" id="L161" title="All 2 branches covered.">        &amp;&amp; !isValidVersion(field.getAnnotation(Since.class), field.getAnnotation(Until.class))) {</span>
+<span class="fc" id="L162">      return true;</span>
+    }
+
+<span class="fc bfc" id="L165" title="All 2 branches covered.">    if (field.isSynthetic()) {</span>
+<span class="fc" id="L166">      return true;</span>
+    }
+
+<span class="fc bfc" id="L169" title="All 2 branches covered.">    if (requireExpose) {</span>
+<span class="fc" id="L170">      Expose annotation = field.getAnnotation(Expose.class);</span>
+<span class="fc bfc" id="L171" title="All 8 branches covered.">      if (annotation == null || (serialize ? !annotation.serialize() : !annotation.deserialize())) {</span>
+<span class="fc" id="L172">        return true;</span>
+      }
+    }
+
+<span class="fc bfc" id="L176" title="All 2 branches covered.">    if (excludeClass(field.getType(), serialize)) {</span>
+<span class="fc" id="L177">      return true;</span>
+    }
+
+<span class="fc bfc" id="L180" title="All 2 branches covered.">    List&lt;ExclusionStrategy&gt; list = serialize ? serializationStrategies : deserializationStrategies;</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">    if (!list.isEmpty()) {</span>
+<span class="fc" id="L182">      FieldAttributes fieldAttributes = new FieldAttributes(field);</span>
+<span class="fc bfc" id="L183" title="All 2 branches covered.">      for (ExclusionStrategy exclusionStrategy : list) {</span>
+<span class="fc bfc" id="L184" title="All 2 branches covered.">        if (exclusionStrategy.shouldSkipField(fieldAttributes)) {</span>
+<span class="fc" id="L185">          return true;</span>
+        }
+<span class="fc" id="L187">      }</span>
+    }
+
+<span class="fc" id="L190">    return false;</span>
+  }
+
+  // public for unit tests; can otherwise be private
+  public boolean excludeClass(Class&lt;?&gt; clazz, boolean serialize) {
+<span class="fc bfc" id="L195" title="All 2 branches covered.">    if (version != Excluder.IGNORE_VERSIONS</span>
+<span class="fc bfc" id="L196" title="All 2 branches covered.">        &amp;&amp; !isValidVersion(clazz.getAnnotation(Since.class), clazz.getAnnotation(Until.class))) {</span>
+<span class="fc" id="L197">      return true;</span>
+    }
+
+<span class="fc bfc" id="L200" title="All 4 branches covered.">    if (!serializeInnerClasses &amp;&amp; isInnerClass(clazz)) {</span>
+<span class="fc" id="L201">      return true;</span>
+    }
+
+    /*
+     * Exclude anonymous and local classes because they can have synthetic fields capturing enclosing
+     * values which makes serialization and deserialization unreliable.
+     * Don't exclude anonymous enum subclasses because enum types have a built-in adapter.
+     *
+     * Exclude only for deserialization; for serialization allow because custom adapter might be
+     * used; if no custom adapter exists reflection-based adapter otherwise excludes value.
+     *
+     * Cannot allow deserialization reliably here because some custom adapters like Collection adapter
+     * fall back to creating instances using Unsafe, which would likely lead to runtime exceptions
+     * for anonymous and local classes if they capture values.
+     */
+<span class="fc bfc" id="L216" title="All 2 branches covered.">    if (!serialize</span>
+<span class="fc bfc" id="L217" title="All 2 branches covered.">        &amp;&amp; !Enum.class.isAssignableFrom(clazz)</span>
+<span class="fc bfc" id="L218" title="All 2 branches covered.">        &amp;&amp; ReflectionHelper.isAnonymousOrNonStaticLocal(clazz)) {</span>
+<span class="fc" id="L219">      return true;</span>
+    }
+
+<span class="fc bfc" id="L222" title="All 2 branches covered.">    List&lt;ExclusionStrategy&gt; list = serialize ? serializationStrategies : deserializationStrategies;</span>
+<span class="fc bfc" id="L223" title="All 2 branches covered.">    for (ExclusionStrategy exclusionStrategy : list) {</span>
+<span class="fc bfc" id="L224" title="All 2 branches covered.">      if (exclusionStrategy.shouldSkipClass(clazz)) {</span>
+<span class="fc" id="L225">        return true;</span>
+      }
+<span class="fc" id="L227">    }</span>
+<span class="fc" id="L228">    return false;</span>
+  }
+
+  private static boolean isInnerClass(Class&lt;?&gt; clazz) {
+<span class="pc bpc" id="L232" title="1 of 4 branches missed.">    return clazz.isMemberClass() &amp;&amp; !ReflectionHelper.isStatic(clazz);</span>
+  }
+
+  private boolean isValidVersion(Since since, Until until) {
+<span class="fc bfc" id="L236" title="All 4 branches covered.">    return isValidSince(since) &amp;&amp; isValidUntil(until);</span>
+  }
+
+  private boolean isValidSince(Since annotation) {
+<span class="fc bfc" id="L240" title="All 2 branches covered.">    if (annotation != null) {</span>
+<span class="fc" id="L241">      double annotationVersion = annotation.value();</span>
+<span class="fc bfc" id="L242" title="All 2 branches covered.">      return version &gt;= annotationVersion;</span>
+    }
+<span class="fc" id="L244">    return true;</span>
+  }
+
+  private boolean isValidUntil(Until annotation) {
+<span class="fc bfc" id="L248" title="All 2 branches covered.">    if (annotation != null) {</span>
+<span class="fc" id="L249">      double annotationVersion = annotation.value();</span>
+<span class="fc bfc" id="L250" title="All 2 branches covered.">      return version &lt; annotationVersion;</span>
+    }
+<span class="fc" id="L252">    return true;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

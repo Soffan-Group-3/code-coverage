@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsonParser.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson</a> &gt; <span class="el_source">JsonParser.java</span></div><h1>JsonParser.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2009 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package com.google.gson;
+
+import com.google.errorprone.annotations.InlineMe;
+import com.google.gson.internal.Streams;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.MalformedJsonException;
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+
+/**
+ * A parser to parse JSON into a parse tree of {@link JsonElement}s.
+ *
+ * &lt;p&gt;The JSON data is parsed in {@linkplain JsonReader#setStrictness(Strictness) lenient mode}.
+ *
+ * &lt;p&gt;Here's an example of parsing from a string:
+ *
+ * &lt;pre&gt;
+ * String json = &quot;{\&quot;key\&quot;: \&quot;value\&quot;}&quot;;
+ * JsonElement jsonElement = JsonParser.parseString(json);
+ * JsonObject jsonObject = jsonElement.getAsJsonObject();
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;It can also parse from a reader:
+ *
+ * &lt;pre&gt;
+ * try (Reader reader = new FileReader(&quot;my-data.json&quot;, StandardCharsets.UTF_8)) {
+ *   JsonElement jsonElement = JsonParser.parseReader(reader);
+ *   JsonObject jsonObject = jsonElement.getAsJsonObject();
+ * }
+ * &lt;/pre&gt;
+ *
+ * &lt;p&gt;If you want to parse from a {@link JsonReader} for more customized parsing requirements, the
+ * following example demonstrates how to achieve it:
+ *
+ * &lt;pre&gt;
+ * String json = &quot;{\&quot;skipObj\&quot;: {\&quot;skipKey\&quot;: \&quot;skipValue\&quot;}, \&quot;obj\&quot;: {\&quot;key\&quot;: \&quot;value\&quot;}}&quot;;
+ * try (JsonReader jsonReader = new JsonReader(new StringReader(json))) {
+ *   jsonReader.beginObject();
+ *   while (jsonReader.hasNext()) {
+ *     String fieldName = jsonReader.nextName();
+ *     if (fieldName.equals(&quot;skipObj&quot;)) {
+ *       jsonReader.skipValue();
+ *     } else {
+ *       JsonElement jsonElement = JsonParser.parseReader(jsonReader);
+ *       JsonObject jsonObject = jsonElement.getAsJsonObject();
+ *     }
+ *   }
+ *   jsonReader.endObject();
+ * }
+ * &lt;/pre&gt;
+ *
+ * @author Inderjeet Singh
+ * @author Joel Leitch
+ * @since 1.3
+ */
+public final class JsonParser {
+  /**
+   * @deprecated No need to instantiate this class, use the static methods instead.
+   */
+  @Deprecated
+<span class="nc" id="L78">  public JsonParser() {}</span>
+
+  /**
+   * Parses the specified JSON string into a parse tree. An exception is thrown if the JSON string
+   * has multiple top-level JSON elements, or if there is trailing data.
+   *
+   * &lt;p&gt;The JSON string is parsed in {@linkplain JsonReader#setStrictness(Strictness) lenient mode}.
+   *
+   * @param json JSON text
+   * @return a parse tree of {@link JsonElement}s corresponding to the specified JSON
+   * @throws JsonParseException if the specified text is not valid JSON
+   * @since 2.8.6
+   */
+  public static JsonElement parseString(String json) throws JsonSyntaxException {
+<span class="fc" id="L92">    return parseReader(new StringReader(json));</span>
+  }
+
+  /**
+   * Parses the complete JSON string provided by the reader into a parse tree. An exception is
+   * thrown if the JSON string has multiple top-level JSON elements, or if there is trailing data.
+   *
+   * &lt;p&gt;The JSON data is parsed in {@linkplain JsonReader#setStrictness(Strictness) lenient mode}.
+   *
+   * @param reader JSON text
+   * @return a parse tree of {@link JsonElement}s corresponding to the specified JSON
+   * @throws JsonParseException if there is an IOException or if the specified text is not valid
+   *     JSON
+   * @since 2.8.6
+   */
+  public static JsonElement parseReader(Reader reader) throws JsonIOException, JsonSyntaxException {
+    try {
+<span class="fc" id="L109">      JsonReader jsonReader = new JsonReader(reader);</span>
+<span class="fc" id="L110">      JsonElement element = parseReader(jsonReader);</span>
+<span class="pc bpc" id="L111" title="1 of 4 branches missed.">      if (!element.isJsonNull() &amp;&amp; jsonReader.peek() != JsonToken.END_DOCUMENT) {</span>
+<span class="nc" id="L112">        throw new JsonSyntaxException(&quot;Did not consume the entire document.&quot;);</span>
+      }
+<span class="fc" id="L114">      return element;</span>
+<span class="fc" id="L115">    } catch (MalformedJsonException e) {</span>
+<span class="fc" id="L116">      throw new JsonSyntaxException(e);</span>
+<span class="nc" id="L117">    } catch (IOException e) {</span>
+<span class="nc" id="L118">      throw new JsonIOException(e);</span>
+<span class="nc" id="L119">    } catch (NumberFormatException e) {</span>
+<span class="nc" id="L120">      throw new JsonSyntaxException(e);</span>
+    }
+  }
+
+  /**
+   * Returns the next value from the JSON stream as a parse tree. Unlike the other {@code parse}
+   * methods, no exception is thrown if the JSON data has multiple top-level JSON elements, or if
+   * there is trailing data.
+   *
+   * &lt;p&gt;If the {@linkplain JsonReader#getStrictness() strictness of the reader} is {@link
+   * Strictness#STRICT}, that strictness will be used for parsing. Otherwise the strictness will be
+   * temporarily changed to {@link Strictness#LENIENT} and will be restored once this method
+   * returns.
+   *
+   * @throws JsonParseException if there is an IOException or if the specified text is not valid
+   *     JSON
+   * @since 2.8.6
+   */
+  public static JsonElement parseReader(JsonReader reader)
+      throws JsonIOException, JsonSyntaxException {
+<span class="fc" id="L140">    Strictness strictness = reader.getStrictness();</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">    if (strictness == Strictness.LEGACY_STRICT) {</span>
+      // For backward compatibility change to LENIENT if reader has default strictness LEGACY_STRICT
+<span class="fc" id="L143">      reader.setStrictness(Strictness.LENIENT);</span>
+    }
+    try {
+<span class="fc" id="L146">      return Streams.parse(reader);</span>
+<span class="nc" id="L147">    } catch (StackOverflowError e) {</span>
+<span class="nc" id="L148">      throw new JsonParseException(&quot;Failed parsing JSON source: &quot; + reader + &quot; to Json&quot;, e);</span>
+<span class="nc" id="L149">    } catch (OutOfMemoryError e) {</span>
+<span class="nc" id="L150">      throw new JsonParseException(&quot;Failed parsing JSON source: &quot; + reader + &quot; to Json&quot;, e);</span>
+    } finally {
+<span class="fc" id="L152">      reader.setStrictness(strictness);</span>
+    }
+  }
+
+  /**
+   * @deprecated Use {@link JsonParser#parseString}
+   */
+  @Deprecated
+  @InlineMe(replacement = &quot;JsonParser.parseString(json)&quot;, imports = &quot;com.google.gson.JsonParser&quot;)
+  public JsonElement parse(String json) throws JsonSyntaxException {
+<span class="nc" id="L162">    return parseString(json);</span>
+  }
+
+  /**
+   * @deprecated Use {@link JsonParser#parseReader(Reader)}
+   */
+  @Deprecated
+  @InlineMe(replacement = &quot;JsonParser.parseReader(json)&quot;, imports = &quot;com.google.gson.JsonParser&quot;)
+  public JsonElement parse(Reader json) throws JsonIOException, JsonSyntaxException {
+<span class="nc" id="L171">    return parseReader(json);</span>
+  }
+
+  /**
+   * @deprecated Use {@link JsonParser#parseReader(JsonReader)}
+   */
+  @Deprecated
+  @InlineMe(replacement = &quot;JsonParser.parseReader(json)&quot;, imports = &quot;com.google.gson.JsonParser&quot;)
+  public JsonElement parse(JsonReader json) throws JsonIOException, JsonSyntaxException {
+<span class="nc" id="L180">    return parseReader(json);</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

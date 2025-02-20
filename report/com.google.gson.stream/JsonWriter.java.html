@@ -1,0 +1,838 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsonWriter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson.stream</a> &gt; <span class="el_source">JsonWriter.java</span></div><h1>JsonWriter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2010 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.stream;
+
+import static com.google.gson.stream.JsonScope.DANGLING_NAME;
+import static com.google.gson.stream.JsonScope.EMPTY_ARRAY;
+import static com.google.gson.stream.JsonScope.EMPTY_DOCUMENT;
+import static com.google.gson.stream.JsonScope.EMPTY_OBJECT;
+import static com.google.gson.stream.JsonScope.NONEMPTY_ARRAY;
+import static com.google.gson.stream.JsonScope.NONEMPTY_DOCUMENT;
+import static com.google.gson.stream.JsonScope.NONEMPTY_OBJECT;
+
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.gson.FormattingStyle;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.Strictness;
+import java.io.Closeable;
+import java.io.Flushable;
+import java.io.IOException;
+import java.io.Writer;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Pattern;
+
+/**
+ * Writes a JSON (&lt;a href=&quot;https://www.ietf.org/rfc/rfc8259.txt&quot;&gt;RFC 8259&lt;/a&gt;) encoded value to a
+ * stream, one token at a time. The stream includes both literal values (strings, numbers, booleans
+ * and nulls) as well as the begin and end delimiters of objects and arrays.
+ *
+ * &lt;h2&gt;Encoding JSON&lt;/h2&gt;
+ *
+ * To encode your data as JSON, create a new {@code JsonWriter}. Call methods on the writer as you
+ * walk the structure's contents, nesting arrays and objects as necessary:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;To write &lt;strong&gt;arrays&lt;/strong&gt;, first call {@link #beginArray()}. Write each of the
+ *       array's elements with the appropriate {@link #value} methods or by nesting other arrays and
+ *       objects. Finally close the array using {@link #endArray()}.
+ *   &lt;li&gt;To write &lt;strong&gt;objects&lt;/strong&gt;, first call {@link #beginObject()}. Write each of the
+ *       object's properties by alternating calls to {@link #name} with the property's value. Write
+ *       property values with the appropriate {@link #value} method or by nesting other objects or
+ *       arrays. Finally close the object using {@link #endObject()}.
+ * &lt;/ul&gt;
+ *
+ * &lt;h2&gt;Configuration&lt;/h2&gt;
+ *
+ * The behavior of this writer can be customized with the following methods:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@link #setFormattingStyle(FormattingStyle)}, the default is {@link
+ *       FormattingStyle#COMPACT}
+ *   &lt;li&gt;{@link #setHtmlSafe(boolean)}, by default HTML characters are not escaped in the JSON
+ *       output
+ *   &lt;li&gt;{@link #setStrictness(Strictness)}, the default is {@link Strictness#LEGACY_STRICT}
+ *   &lt;li&gt;{@link #setSerializeNulls(boolean)}, by default {@code null} is serialized
+ * &lt;/ul&gt;
+ *
+ * The default configuration of {@code JsonWriter} instances used internally by the {@link Gson}
+ * class differs, and can be adjusted with the various {@link GsonBuilder} methods.
+ *
+ * &lt;h2&gt;Example&lt;/h2&gt;
+ *
+ * Suppose we'd like to encode a stream of messages such as the following:
+ *
+ * &lt;pre&gt;{@code
+ * [
+ *   {
+ *     &quot;id&quot;: 912345678901,
+ *     &quot;text&quot;: &quot;How do I stream JSON in Java?&quot;,
+ *     &quot;geo&quot;: null,
+ *     &quot;user&quot;: {
+ *       &quot;name&quot;: &quot;json_newb&quot;,
+ *       &quot;followers_count&quot;: 41
+ *      }
+ *   },
+ *   {
+ *     &quot;id&quot;: 912345678902,
+ *     &quot;text&quot;: &quot;@json_newb just use JsonWriter!&quot;,
+ *     &quot;geo&quot;: [50.454722, -104.606667],
+ *     &quot;user&quot;: {
+ *       &quot;name&quot;: &quot;jesse&quot;,
+ *       &quot;followers_count&quot;: 2
+ *     }
+ *   }
+ * ]
+ * }&lt;/pre&gt;
+ *
+ * This code encodes the above structure:
+ *
+ * &lt;pre&gt;{@code
+ * public void writeJsonStream(OutputStream out, List&lt;Message&gt; messages) throws IOException {
+ *   JsonWriter writer = new JsonWriter(new OutputStreamWriter(out, &quot;UTF-8&quot;));
+ *   writer.setIndent(&quot;    &quot;);
+ *   writeMessagesArray(writer, messages);
+ *   writer.close();
+ * }
+ *
+ * public void writeMessagesArray(JsonWriter writer, List&lt;Message&gt; messages) throws IOException {
+ *   writer.beginArray();
+ *   for (Message message : messages) {
+ *     writeMessage(writer, message);
+ *   }
+ *   writer.endArray();
+ * }
+ *
+ * public void writeMessage(JsonWriter writer, Message message) throws IOException {
+ *   writer.beginObject();
+ *   writer.name(&quot;id&quot;).value(message.getId());
+ *   writer.name(&quot;text&quot;).value(message.getText());
+ *   if (message.getGeo() != null) {
+ *     writer.name(&quot;geo&quot;);
+ *     writeDoublesArray(writer, message.getGeo());
+ *   } else {
+ *     writer.name(&quot;geo&quot;).nullValue();
+ *   }
+ *   writer.name(&quot;user&quot;);
+ *   writeUser(writer, message.getUser());
+ *   writer.endObject();
+ * }
+ *
+ * public void writeUser(JsonWriter writer, User user) throws IOException {
+ *   writer.beginObject();
+ *   writer.name(&quot;name&quot;).value(user.getName());
+ *   writer.name(&quot;followers_count&quot;).value(user.getFollowersCount());
+ *   writer.endObject();
+ * }
+ *
+ * public void writeDoublesArray(JsonWriter writer, List&lt;Double&gt; doubles) throws IOException {
+ *   writer.beginArray();
+ *   for (Double value : doubles) {
+ *     writer.value(value);
+ *   }
+ *   writer.endArray();
+ * }
+ * }&lt;/pre&gt;
+ *
+ * &lt;p&gt;Each {@code JsonWriter} may be used to write a single JSON stream. Instances of this class are
+ * not thread safe. Calls that would result in a malformed JSON string will fail with an {@link
+ * IllegalStateException}.
+ *
+ * @author Jesse Wilson
+ * @since 1.6
+ */
+public class JsonWriter implements Closeable, Flushable {
+
+  // Syntax as defined by https://datatracker.ietf.org/doc/html/rfc8259#section-6
+<span class="fc" id="L166">  private static final Pattern VALID_JSON_NUMBER_PATTERN =</span>
+<span class="fc" id="L167">      Pattern.compile(&quot;-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?&quot;);</span>
+
+  /*
+   * From RFC 8259, &quot;All Unicode characters may be placed within the
+   * quotation marks except for the characters that must be escaped:
+   * quotation mark, reverse solidus, and the control characters
+   * (U+0000 through U+001F).&quot;
+   *
+   * We also escape '\u2028' and '\u2029', which JavaScript interprets as
+   * newline characters. This prevents eval() from failing with a syntax
+   * error. http://code.google.com/p/google-gson/issues/detail?id=341
+   */
+  private static final String[] REPLACEMENT_CHARS;
+  private static final String[] HTML_SAFE_REPLACEMENT_CHARS;
+
+  static {
+<span class="fc" id="L183">    REPLACEMENT_CHARS = new String[128];</span>
+<span class="fc bfc" id="L184" title="All 2 branches covered.">    for (int i = 0; i &lt;= 0x1f; i++) {</span>
+<span class="fc" id="L185">      REPLACEMENT_CHARS[i] = String.format(&quot;\\u%04x&quot;, i);</span>
+    }
+<span class="fc" id="L187">    REPLACEMENT_CHARS['&quot;'] = &quot;\\\&quot;&quot;;</span>
+<span class="fc" id="L188">    REPLACEMENT_CHARS['\\'] = &quot;\\\\&quot;;</span>
+<span class="fc" id="L189">    REPLACEMENT_CHARS['\t'] = &quot;\\t&quot;;</span>
+<span class="fc" id="L190">    REPLACEMENT_CHARS['\b'] = &quot;\\b&quot;;</span>
+<span class="fc" id="L191">    REPLACEMENT_CHARS['\n'] = &quot;\\n&quot;;</span>
+<span class="fc" id="L192">    REPLACEMENT_CHARS['\r'] = &quot;\\r&quot;;</span>
+<span class="fc" id="L193">    REPLACEMENT_CHARS['\f'] = &quot;\\f&quot;;</span>
+<span class="fc" id="L194">    HTML_SAFE_REPLACEMENT_CHARS = REPLACEMENT_CHARS.clone();</span>
+<span class="fc" id="L195">    HTML_SAFE_REPLACEMENT_CHARS['&lt;'] = &quot;\\u003c&quot;;</span>
+<span class="fc" id="L196">    HTML_SAFE_REPLACEMENT_CHARS['&gt;'] = &quot;\\u003e&quot;;</span>
+<span class="fc" id="L197">    HTML_SAFE_REPLACEMENT_CHARS['&amp;'] = &quot;\\u0026&quot;;</span>
+<span class="fc" id="L198">    HTML_SAFE_REPLACEMENT_CHARS['='] = &quot;\\u003d&quot;;</span>
+<span class="fc" id="L199">    HTML_SAFE_REPLACEMENT_CHARS['\''] = &quot;\\u0027&quot;;</span>
+<span class="fc" id="L200">  }</span>
+
+  /** The JSON output destination */
+  private final Writer out;
+
+<span class="fc" id="L205">  private int[] stack = new int[32];</span>
+<span class="fc" id="L206">  private int stackSize = 0;</span>
+
+  {
+<span class="fc" id="L209">    push(EMPTY_DOCUMENT);</span>
+  }
+
+  private FormattingStyle formattingStyle;
+  // These fields cache data derived from the formatting style, to avoid having to
+  // re-evaluate it every time something is written
+  private String formattedColon;
+  private String formattedComma;
+  private boolean usesEmptyNewlineAndIndent;
+
+<span class="fc" id="L219">  private Strictness strictness = Strictness.LEGACY_STRICT;</span>
+
+  private boolean htmlSafe;
+
+  private String deferredName;
+
+<span class="fc" id="L225">  private boolean serializeNulls = true;</span>
+
+  /**
+   * Creates a new instance that writes a JSON-encoded stream to {@code out}. For best performance,
+   * ensure {@link Writer} is buffered; wrapping in {@link java.io.BufferedWriter BufferedWriter} if
+   * necessary.
+   */
+<span class="fc" id="L232">  public JsonWriter(Writer out) {</span>
+<span class="fc" id="L233">    this.out = Objects.requireNonNull(out, &quot;out == null&quot;);</span>
+<span class="fc" id="L234">    setFormattingStyle(FormattingStyle.COMPACT);</span>
+<span class="fc" id="L235">  }</span>
+
+  /**
+   * Sets the indentation string to be repeated for each level of indentation in the encoded
+   * document. If {@code indent.isEmpty()} the encoded document will be compact. Otherwise the
+   * encoded document will be more human-readable.
+   *
+   * &lt;p&gt;This is a convenience method which overwrites any previously {@linkplain
+   * #setFormattingStyle(FormattingStyle) set formatting style} with either {@link
+   * FormattingStyle#COMPACT} if the given indent string is empty, or {@link FormattingStyle#PRETTY}
+   * with the given indent if not empty.
+   *
+   * @param indent a string containing only whitespace.
+   */
+  public final void setIndent(String indent) {
+<span class="pc bpc" id="L250" title="1 of 2 branches missed.">    if (indent.isEmpty()) {</span>
+<span class="nc" id="L251">      setFormattingStyle(FormattingStyle.COMPACT);</span>
+    } else {
+<span class="fc" id="L253">      setFormattingStyle(FormattingStyle.PRETTY.withIndent(indent));</span>
+    }
+<span class="fc" id="L255">  }</span>
+
+  /**
+   * Sets the formatting style to be used in the encoded document.
+   *
+   * &lt;p&gt;The formatting style specifies for example the indentation string to be repeated for each
+   * level of indentation, or the newline style, to accommodate various OS styles.
+   *
+   * @param formattingStyle the formatting style to use, must not be {@code null}.
+   * @see #getFormattingStyle()
+   * @since 2.11.0
+   */
+  public final void setFormattingStyle(FormattingStyle formattingStyle) {
+<span class="fc" id="L268">    this.formattingStyle = Objects.requireNonNull(formattingStyle);</span>
+
+<span class="fc" id="L270">    this.formattedComma = &quot;,&quot;;</span>
+<span class="fc bfc" id="L271" title="All 2 branches covered.">    if (this.formattingStyle.usesSpaceAfterSeparators()) {</span>
+<span class="fc" id="L272">      this.formattedColon = &quot;: &quot;;</span>
+
+      // Only add space if no newline is written
+<span class="fc bfc" id="L275" title="All 2 branches covered.">      if (this.formattingStyle.getNewline().isEmpty()) {</span>
+<span class="fc" id="L276">        this.formattedComma = &quot;, &quot;;</span>
+      }
+    } else {
+<span class="fc" id="L279">      this.formattedColon = &quot;:&quot;;</span>
+    }
+
+<span class="fc" id="L282">    this.usesEmptyNewlineAndIndent =</span>
+<span class="fc bfc" id="L283" title="All 4 branches covered.">        this.formattingStyle.getNewline().isEmpty() &amp;&amp; this.formattingStyle.getIndent().isEmpty();</span>
+<span class="fc" id="L284">  }</span>
+
+  /**
+   * Returns the pretty printing style used by this writer.
+   *
+   * @return the {@code FormattingStyle} that will be used.
+   * @see #setFormattingStyle(FormattingStyle)
+   * @since 2.11.0
+   */
+  public final FormattingStyle getFormattingStyle() {
+<span class="nc" id="L294">    return formattingStyle;</span>
+  }
+
+  /**
+   * Sets the strictness of this writer.
+   *
+   * @deprecated Please use {@link #setStrictness(Strictness)} instead. {@code
+   *     JsonWriter.setLenient(true)} should be replaced by {@code
+   *     JsonWriter.setStrictness(Strictness.LENIENT)} and {@code JsonWriter.setLenient(false)}
+   *     should be replaced by {@code JsonWriter.setStrictness(Strictness.LEGACY_STRICT)}.&lt;br&gt;
+   *     However, if you used {@code setLenient(false)} before, you might prefer {@link
+   *     Strictness#STRICT} now instead.
+   * @param lenient whether this writer should be lenient. If true, the strictness is set to {@link
+   *     Strictness#LENIENT}. If false, the strictness is set to {@link Strictness#LEGACY_STRICT}.
+   * @see #setStrictness(Strictness)
+   */
+  @Deprecated
+  // Don't specify @InlineMe, so caller with `setLenient(false)` becomes aware of new
+  // Strictness.STRICT
+  @SuppressWarnings(&quot;InlineMeSuggester&quot;)
+  public final void setLenient(boolean lenient) {
+<span class="fc bfc" id="L315" title="All 2 branches covered.">    setStrictness(lenient ? Strictness.LENIENT : Strictness.LEGACY_STRICT);</span>
+<span class="fc" id="L316">  }</span>
+
+  /**
+   * Returns true if the {@link Strictness} of this writer is equal to {@link Strictness#LENIENT}.
+   *
+   * @see #getStrictness()
+   */
+  public boolean isLenient() {
+<span class="fc bfc" id="L324" title="All 2 branches covered.">    return strictness == Strictness.LENIENT;</span>
+  }
+
+  /**
+   * Configures how strict this writer is with regard to the syntax rules specified in &lt;a
+   * href=&quot;https://www.ietf.org/rfc/rfc8259.txt&quot;&gt;RFC 8259&lt;/a&gt;. By default, {@link
+   * Strictness#LEGACY_STRICT} is used.
+   *
+   * &lt;dl&gt;
+   *   &lt;dt&gt;{@link Strictness#STRICT} &amp;amp; {@link Strictness#LEGACY_STRICT}
+   *   &lt;dd&gt;The behavior of these is currently identical. In these strictness modes, the writer only
+   *       writes JSON in accordance with RFC 8259.
+   *   &lt;dt&gt;{@link Strictness#LENIENT}
+   *   &lt;dd&gt;This mode relaxes the behavior of the writer to allow the writing of {@link
+   *       Double#isNaN() NaNs} and {@link Double#isInfinite() infinities}. It also allows writing
+   *       multiple top level values.
+   * &lt;/dl&gt;
+   *
+   * @param strictness the new strictness of this writer. May not be {@code null}.
+   * @see #getStrictness()
+   * @since 2.11.0
+   */
+  public final void setStrictness(Strictness strictness) {
+<span class="fc" id="L347">    this.strictness = Objects.requireNonNull(strictness);</span>
+<span class="fc" id="L348">  }</span>
+
+  /**
+   * Returns the {@linkplain Strictness strictness} of this writer.
+   *
+   * @see #setStrictness(Strictness)
+   * @since 2.11.0
+   */
+  public final Strictness getStrictness() {
+<span class="fc" id="L357">    return strictness;</span>
+  }
+
+  /**
+   * Configures this writer to emit JSON that's safe for direct inclusion in HTML and XML documents.
+   * This escapes the HTML characters {@code &lt;}, {@code &gt;}, {@code &amp;}, {@code =} and {@code '}
+   * before writing them to the stream. Without this setting, your XML/HTML encoder should replace
+   * these characters with the corresponding escape sequences.
+   *
+   * @see #isHtmlSafe()
+   */
+  public final void setHtmlSafe(boolean htmlSafe) {
+<span class="fc" id="L369">    this.htmlSafe = htmlSafe;</span>
+<span class="fc" id="L370">  }</span>
+
+  /**
+   * Returns true if this writer writes JSON that's safe for inclusion in HTML and XML documents.
+   *
+   * @see #setHtmlSafe(boolean)
+   */
+  public final boolean isHtmlSafe() {
+<span class="fc" id="L378">    return htmlSafe;</span>
+  }
+
+  /**
+   * Sets whether object members are serialized when their value is null. This has no impact on
+   * array elements. The default is true.
+   *
+   * @see #getSerializeNulls()
+   */
+  public final void setSerializeNulls(boolean serializeNulls) {
+<span class="fc" id="L388">    this.serializeNulls = serializeNulls;</span>
+<span class="fc" id="L389">  }</span>
+
+  /**
+   * Returns true if object members are serialized when their value is null. This has no impact on
+   * array elements. The default is true.
+   *
+   * @see #setSerializeNulls(boolean)
+   */
+  public final boolean getSerializeNulls() {
+<span class="fc" id="L398">    return serializeNulls;</span>
+  }
+
+  /**
+   * Begins encoding a new array. Each call to this method must be paired with a call to {@link
+   * #endArray}.
+   *
+   * @return this writer.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter beginArray() throws IOException {
+<span class="fc" id="L409">    writeDeferredName();</span>
+<span class="fc" id="L410">    return openScope(EMPTY_ARRAY, '[');</span>
+  }
+
+  /**
+   * Ends encoding the current array.
+   *
+   * @return this writer.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter endArray() throws IOException {
+<span class="fc" id="L420">    return closeScope(EMPTY_ARRAY, NONEMPTY_ARRAY, ']');</span>
+  }
+
+  /**
+   * Begins encoding a new object. Each call to this method must be paired with a call to {@link
+   * #endObject}.
+   *
+   * @return this writer.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter beginObject() throws IOException {
+<span class="fc" id="L431">    writeDeferredName();</span>
+<span class="fc" id="L432">    return openScope(EMPTY_OBJECT, '{');</span>
+  }
+
+  /**
+   * Ends encoding the current object.
+   *
+   * @return this writer.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter endObject() throws IOException {
+<span class="fc" id="L442">    return closeScope(EMPTY_OBJECT, NONEMPTY_OBJECT, '}');</span>
+  }
+
+  /** Enters a new scope by appending any necessary whitespace and the given bracket. */
+  @CanIgnoreReturnValue
+  private JsonWriter openScope(int empty, char openBracket) throws IOException {
+<span class="fc" id="L448">    beforeValue();</span>
+<span class="fc" id="L449">    push(empty);</span>
+<span class="fc" id="L450">    out.write(openBracket);</span>
+<span class="fc" id="L451">    return this;</span>
+  }
+
+  /** Closes the current scope by appending any necessary whitespace and the given bracket. */
+  @CanIgnoreReturnValue
+  private JsonWriter closeScope(int empty, int nonempty, char closeBracket) throws IOException {
+<span class="fc" id="L457">    int context = peek();</span>
+<span class="pc bpc" id="L458" title="1 of 4 branches missed.">    if (context != nonempty &amp;&amp; context != empty) {</span>
+<span class="nc" id="L459">      throw new IllegalStateException(&quot;Nesting problem.&quot;);</span>
+    }
+<span class="pc bpc" id="L461" title="1 of 2 branches missed.">    if (deferredName != null) {</span>
+<span class="nc" id="L462">      throw new IllegalStateException(&quot;Dangling name: &quot; + deferredName);</span>
+    }
+
+<span class="fc" id="L465">    stackSize--;</span>
+<span class="fc bfc" id="L466" title="All 2 branches covered.">    if (context == nonempty) {</span>
+<span class="fc" id="L467">      newline();</span>
+    }
+<span class="fc" id="L469">    out.write(closeBracket);</span>
+<span class="fc" id="L470">    return this;</span>
+  }
+
+  private void push(int newTop) {
+<span class="fc bfc" id="L474" title="All 2 branches covered.">    if (stackSize == stack.length) {</span>
+<span class="fc" id="L475">      stack = Arrays.copyOf(stack, stackSize * 2);</span>
+    }
+<span class="fc" id="L477">    stack[stackSize++] = newTop;</span>
+<span class="fc" id="L478">  }</span>
+
+  /** Returns the value on the top of the stack. */
+  private int peek() {
+<span class="fc bfc" id="L482" title="All 2 branches covered.">    if (stackSize == 0) {</span>
+<span class="fc" id="L483">      throw new IllegalStateException(&quot;JsonWriter is closed.&quot;);</span>
+    }
+<span class="fc" id="L485">    return stack[stackSize - 1];</span>
+  }
+
+  /** Replace the value on the top of the stack with the given value. */
+  private void replaceTop(int topOfStack) {
+<span class="fc" id="L490">    stack[stackSize - 1] = topOfStack;</span>
+<span class="fc" id="L491">  }</span>
+
+  /**
+   * Encodes the property name.
+   *
+   * @param name the name of the forthcoming value. May not be {@code null}.
+   * @return this writer.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter name(String name) throws IOException {
+<span class="fc" id="L501">    Objects.requireNonNull(name, &quot;name == null&quot;);</span>
+<span class="pc bpc" id="L502" title="1 of 2 branches missed.">    if (deferredName != null) {</span>
+<span class="nc" id="L503">      throw new IllegalStateException(&quot;Already wrote a name, expecting a value.&quot;);</span>
+    }
+<span class="fc" id="L505">    int context = peek();</span>
+<span class="pc bpc" id="L506" title="1 of 4 branches missed.">    if (context != EMPTY_OBJECT &amp;&amp; context != NONEMPTY_OBJECT) {</span>
+<span class="nc" id="L507">      throw new IllegalStateException(&quot;Please begin an object before writing a name.&quot;);</span>
+    }
+<span class="fc" id="L509">    deferredName = name;</span>
+<span class="fc" id="L510">    return this;</span>
+  }
+
+  private void writeDeferredName() throws IOException {
+<span class="fc bfc" id="L514" title="All 2 branches covered.">    if (deferredName != null) {</span>
+<span class="fc" id="L515">      beforeName();</span>
+<span class="fc" id="L516">      string(deferredName);</span>
+<span class="fc" id="L517">      deferredName = null;</span>
+    }
+<span class="fc" id="L519">  }</span>
+
+  /**
+   * Encodes {@code value}.
+   *
+   * @param value the literal string value, or null to encode a null literal.
+   * @return this writer.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter value(String value) throws IOException {
+<span class="fc bfc" id="L529" title="All 2 branches covered.">    if (value == null) {</span>
+<span class="fc" id="L530">      return nullValue();</span>
+    }
+<span class="fc" id="L532">    writeDeferredName();</span>
+<span class="fc" id="L533">    beforeValue();</span>
+<span class="fc" id="L534">    string(value);</span>
+<span class="fc" id="L535">    return this;</span>
+  }
+
+  /**
+   * Encodes {@code value}.
+   *
+   * @return this writer.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter value(boolean value) throws IOException {
+<span class="fc" id="L545">    writeDeferredName();</span>
+<span class="fc" id="L546">    beforeValue();</span>
+<span class="fc bfc" id="L547" title="All 2 branches covered.">    out.write(value ? &quot;true&quot; : &quot;false&quot;);</span>
+<span class="fc" id="L548">    return this;</span>
+  }
+
+  /**
+   * Encodes {@code value}.
+   *
+   * @return this writer.
+   * @since 2.7
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter value(Boolean value) throws IOException {
+<span class="fc bfc" id="L559" title="All 2 branches covered.">    if (value == null) {</span>
+<span class="fc" id="L560">      return nullValue();</span>
+    }
+<span class="fc" id="L562">    writeDeferredName();</span>
+<span class="fc" id="L563">    beforeValue();</span>
+<span class="fc bfc" id="L564" title="All 2 branches covered.">    out.write(value ? &quot;true&quot; : &quot;false&quot;);</span>
+<span class="fc" id="L565">    return this;</span>
+  }
+
+  /**
+   * Encodes {@code value}.
+   *
+   * @param value a finite value, or if {@link #setStrictness(Strictness) lenient}, also {@link
+   *     Float#isNaN() NaN} or {@link Float#isInfinite() infinity}.
+   * @return this writer.
+   * @throws IllegalArgumentException if the value is NaN or Infinity and this writer is not {@link
+   *     #setStrictness(Strictness) lenient}.
+   * @since 2.9.1
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter value(float value) throws IOException {
+<span class="nc" id="L580">    writeDeferredName();</span>
+<span class="nc bnc" id="L581" title="All 6 branches missed.">    if (strictness != Strictness.LENIENT &amp;&amp; (Float.isNaN(value) || Float.isInfinite(value))) {</span>
+<span class="nc" id="L582">      throw new IllegalArgumentException(&quot;Numeric values must be finite, but was &quot; + value);</span>
+    }
+<span class="nc" id="L584">    beforeValue();</span>
+<span class="nc" id="L585">    out.append(Float.toString(value));</span>
+<span class="nc" id="L586">    return this;</span>
+  }
+
+  /**
+   * Encodes {@code value}.
+   *
+   * @param value a finite value, or if {@link #setStrictness(Strictness) lenient}, also {@link
+   *     Double#isNaN() NaN} or {@link Double#isInfinite() infinity}.
+   * @return this writer.
+   * @throws IllegalArgumentException if the value is NaN or Infinity and this writer is not {@link
+   *     #setStrictness(Strictness) lenient}.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter value(double value) throws IOException {
+<span class="fc" id="L600">    writeDeferredName();</span>
+<span class="pc bpc" id="L601" title="2 of 6 branches missed.">    if (strictness != Strictness.LENIENT &amp;&amp; (Double.isNaN(value) || Double.isInfinite(value))) {</span>
+<span class="nc" id="L602">      throw new IllegalArgumentException(&quot;Numeric values must be finite, but was &quot; + value);</span>
+    }
+<span class="fc" id="L604">    beforeValue();</span>
+<span class="fc" id="L605">    out.append(Double.toString(value));</span>
+<span class="fc" id="L606">    return this;</span>
+  }
+
+  /**
+   * Encodes {@code value}.
+   *
+   * @return this writer.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter value(long value) throws IOException {
+<span class="fc" id="L616">    writeDeferredName();</span>
+<span class="fc" id="L617">    beforeValue();</span>
+<span class="fc" id="L618">    out.write(Long.toString(value));</span>
+<span class="fc" id="L619">    return this;</span>
+  }
+
+  /**
+   * Encodes {@code value}. The value is written by directly writing the {@link Number#toString()}
+   * result to JSON. Implementations must make sure that the result represents a valid JSON number.
+   *
+   * @param value a finite value, or if {@link #setStrictness(Strictness) lenient}, also {@link
+   *     Double#isNaN() NaN} or {@link Double#isInfinite() infinity}.
+   * @return this writer.
+   * @throws IllegalArgumentException if the value is NaN or Infinity and this writer is not {@link
+   *     #setStrictness(Strictness) lenient}; or if the {@code toString()} result is not a valid
+   *     JSON number.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter value(Number value) throws IOException {
+<span class="fc bfc" id="L635" title="All 2 branches covered.">    if (value == null) {</span>
+<span class="fc" id="L636">      return nullValue();</span>
+    }
+
+<span class="fc" id="L639">    writeDeferredName();</span>
+<span class="fc" id="L640">    String string = value.toString();</span>
+<span class="fc" id="L641">    Class&lt;? extends Number&gt; numberClass = value.getClass();</span>
+
+<span class="fc bfc" id="L643" title="All 2 branches covered.">    if (!alwaysCreatesValidJsonNumber(numberClass)) {</span>
+      // Validate that string is valid before writing it directly to JSON output
+<span class="fc bfc" id="L645" title="All 6 branches covered.">      if (string.equals(&quot;-Infinity&quot;) || string.equals(&quot;Infinity&quot;) || string.equals(&quot;NaN&quot;)) {</span>
+<span class="pc bpc" id="L646" title="1 of 2 branches missed.">        if (strictness != Strictness.LENIENT) {</span>
+<span class="nc" id="L647">          throw new IllegalArgumentException(&quot;Numeric values must be finite, but was &quot; + string);</span>
+        }
+<span class="fc bfc" id="L649" title="All 4 branches covered.">      } else if (numberClass != Float.class</span>
+          &amp;&amp; numberClass != Double.class
+<span class="pc bpc" id="L651" title="1 of 2 branches missed.">          &amp;&amp; !VALID_JSON_NUMBER_PATTERN.matcher(string).matches()) {</span>
+<span class="nc" id="L652">        throw new IllegalArgumentException(</span>
+            &quot;String created by &quot; + numberClass + &quot; is not a valid JSON number: &quot; + string);
+      }
+    }
+
+<span class="fc" id="L657">    beforeValue();</span>
+<span class="fc" id="L658">    out.append(string);</span>
+<span class="fc" id="L659">    return this;</span>
+  }
+
+  /**
+   * Encodes {@code null}.
+   *
+   * @return this writer.
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter nullValue() throws IOException {
+<span class="fc bfc" id="L669" title="All 2 branches covered.">    if (deferredName != null) {</span>
+<span class="fc bfc" id="L670" title="All 2 branches covered.">      if (serializeNulls) {</span>
+<span class="fc" id="L671">        writeDeferredName();</span>
+      } else {
+<span class="fc" id="L673">        deferredName = null;</span>
+<span class="fc" id="L674">        return this; // skip the name and the value</span>
+      }
+    }
+<span class="fc" id="L677">    beforeValue();</span>
+<span class="fc" id="L678">    out.write(&quot;null&quot;);</span>
+<span class="fc" id="L679">    return this;</span>
+  }
+
+  /**
+   * Writes {@code value} directly to the writer without quoting or escaping. This might not be
+   * supported by all implementations, if not supported an {@code UnsupportedOperationException} is
+   * thrown.
+   *
+   * @param value the literal string value, or null to encode a null literal.
+   * @return this writer.
+   * @throws UnsupportedOperationException if this writer does not support writing raw JSON values.
+   * @since 2.4
+   */
+  @CanIgnoreReturnValue
+  public JsonWriter jsonValue(String value) throws IOException {
+<span class="nc bnc" id="L694" title="All 2 branches missed.">    if (value == null) {</span>
+<span class="nc" id="L695">      return nullValue();</span>
+    }
+<span class="nc" id="L697">    writeDeferredName();</span>
+<span class="nc" id="L698">    beforeValue();</span>
+<span class="nc" id="L699">    out.append(value);</span>
+<span class="nc" id="L700">    return this;</span>
+  }
+
+  /**
+   * Ensures all buffered data is written to the underlying {@link Writer} and flushes that writer.
+   */
+  @Override
+  public void flush() throws IOException {
+<span class="nc bnc" id="L708" title="All 2 branches missed.">    if (stackSize == 0) {</span>
+<span class="nc" id="L709">      throw new IllegalStateException(&quot;JsonWriter is closed.&quot;);</span>
+    }
+<span class="nc" id="L711">    out.flush();</span>
+<span class="nc" id="L712">  }</span>
+
+  /**
+   * Flushes and closes this writer and the underlying {@link Writer}.
+   *
+   * @throws IOException if the JSON document is incomplete.
+   */
+  @Override
+  public void close() throws IOException {
+<span class="fc" id="L721">    out.close();</span>
+
+<span class="fc" id="L723">    int size = stackSize;</span>
+<span class="pc bpc" id="L724" title="3 of 6 branches missed.">    if (size &gt; 1 || (size == 1 &amp;&amp; stack[size - 1] != NONEMPTY_DOCUMENT)) {</span>
+<span class="nc" id="L725">      throw new IOException(&quot;Incomplete document&quot;);</span>
+    }
+<span class="fc" id="L727">    stackSize = 0;</span>
+<span class="fc" id="L728">  }</span>
+
+  /** Returns whether the {@code toString()} of {@code c} will always return a valid JSON number. */
+  private static boolean alwaysCreatesValidJsonNumber(Class&lt;? extends Number&gt; c) {
+    // Does not include Float or Double because their value can be NaN or Infinity
+    // Does not include LazilyParsedNumber because it could contain a malformed string
+<span class="pc bpc" id="L734" title="4 of 16 branches missed.">    return c == Integer.class</span>
+        || c == Long.class
+        || c == Byte.class
+        || c == Short.class
+        || c == BigDecimal.class
+        || c == BigInteger.class
+        || c == AtomicInteger.class
+        || c == AtomicLong.class;
+  }
+
+  private void string(String value) throws IOException {
+<span class="fc bfc" id="L745" title="All 2 branches covered.">    String[] replacements = htmlSafe ? HTML_SAFE_REPLACEMENT_CHARS : REPLACEMENT_CHARS;</span>
+<span class="fc" id="L746">    out.write('\&quot;');</span>
+<span class="fc" id="L747">    int last = 0;</span>
+<span class="fc" id="L748">    int length = value.length();</span>
+<span class="fc bfc" id="L749" title="All 2 branches covered.">    for (int i = 0; i &lt; length; i++) {</span>
+<span class="fc" id="L750">      char c = value.charAt(i);</span>
+      String replacement;
+<span class="fc bfc" id="L752" title="All 2 branches covered.">      if (c &lt; 128) {</span>
+<span class="fc" id="L753">        replacement = replacements[c];</span>
+<span class="fc bfc" id="L754" title="All 2 branches covered.">        if (replacement == null) {</span>
+<span class="fc" id="L755">          continue;</span>
+        }
+<span class="pc bpc" id="L757" title="1 of 2 branches missed.">      } else if (c == '\u2028') {</span>
+<span class="nc" id="L758">        replacement = &quot;\\u2028&quot;;</span>
+<span class="pc bpc" id="L759" title="1 of 2 branches missed.">      } else if (c == '\u2029') {</span>
+<span class="nc" id="L760">        replacement = &quot;\\u2029&quot;;</span>
+      } else {
+        continue;
+      }
+<span class="fc bfc" id="L764" title="All 2 branches covered.">      if (last &lt; i) {</span>
+<span class="fc" id="L765">        out.write(value, last, i - last);</span>
+      }
+<span class="fc" id="L767">      out.write(replacement);</span>
+<span class="fc" id="L768">      last = i + 1;</span>
+    }
+<span class="fc bfc" id="L770" title="All 2 branches covered.">    if (last &lt; length) {</span>
+<span class="fc" id="L771">      out.write(value, last, length - last);</span>
+    }
+<span class="fc" id="L773">    out.write('\&quot;');</span>
+<span class="fc" id="L774">  }</span>
+
+  private void newline() throws IOException {
+<span class="fc bfc" id="L777" title="All 2 branches covered.">    if (usesEmptyNewlineAndIndent) {</span>
+<span class="fc" id="L778">      return;</span>
+    }
+
+<span class="fc" id="L781">    out.write(formattingStyle.getNewline());</span>
+<span class="fc bfc" id="L782" title="All 2 branches covered.">    for (int i = 1, size = stackSize; i &lt; size; i++) {</span>
+<span class="fc" id="L783">      out.write(formattingStyle.getIndent());</span>
+    }
+<span class="fc" id="L785">  }</span>
+
+  /**
+   * Inserts any necessary separators and whitespace before a name. Also adjusts the stack to expect
+   * the name's value.
+   */
+  private void beforeName() throws IOException {
+<span class="fc" id="L792">    int context = peek();</span>
+<span class="fc bfc" id="L793" title="All 2 branches covered.">    if (context == NONEMPTY_OBJECT) { // first in object</span>
+<span class="fc" id="L794">      out.write(formattedComma);</span>
+<span class="pc bpc" id="L795" title="1 of 2 branches missed.">    } else if (context != EMPTY_OBJECT) { // not in an object!</span>
+<span class="nc" id="L796">      throw new IllegalStateException(&quot;Nesting problem.&quot;);</span>
+    }
+<span class="fc" id="L798">    newline();</span>
+<span class="fc" id="L799">    replaceTop(DANGLING_NAME);</span>
+<span class="fc" id="L800">  }</span>
+
+  /**
+   * Inserts any necessary separators and whitespace before a literal value, inline array, or inline
+   * object. Also adjusts the stack to expect either a closing bracket or another element.
+   */
+  @SuppressWarnings(&quot;fallthrough&quot;)
+  private void beforeValue() throws IOException {
+<span class="fc bfc" id="L808" title="All 6 branches covered.">    switch (peek()) {</span>
+      case NONEMPTY_DOCUMENT:
+<span class="fc bfc" id="L810" title="All 2 branches covered.">        if (strictness != Strictness.LENIENT) {</span>
+<span class="fc" id="L811">          throw new IllegalStateException(&quot;JSON must have only one top-level value.&quot;);</span>
+        }
+      // fall-through
+      case EMPTY_DOCUMENT: // first in document
+<span class="fc" id="L815">        replaceTop(NONEMPTY_DOCUMENT);</span>
+<span class="fc" id="L816">        break;</span>
+
+      case EMPTY_ARRAY: // first in array
+<span class="fc" id="L819">        replaceTop(NONEMPTY_ARRAY);</span>
+<span class="fc" id="L820">        newline();</span>
+<span class="fc" id="L821">        break;</span>
+
+      case NONEMPTY_ARRAY: // another in array
+<span class="fc" id="L824">        out.append(formattedComma);</span>
+<span class="fc" id="L825">        newline();</span>
+<span class="fc" id="L826">        break;</span>
+
+      case DANGLING_NAME: // value for name
+<span class="fc" id="L829">        out.append(formattedColon);</span>
+<span class="fc" id="L830">        replaceTop(NONEMPTY_OBJECT);</span>
+<span class="fc" id="L831">        break;</span>
+
+      default:
+<span class="fc" id="L834">        throw new IllegalStateException(&quot;Nesting problem.&quot;);</span>
+    }
+<span class="fc" id="L836">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

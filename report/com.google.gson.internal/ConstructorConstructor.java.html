@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ConstructorConstructor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson.internal</a> &gt; <span class="el_source">ConstructorConstructor.java</span></div><h1>ConstructorConstructor.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2011 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.internal;
+
+import com.google.gson.InstanceCreator;
+import com.google.gson.JsonIOException;
+import com.google.gson.ReflectionAccessFilter;
+import com.google.gson.ReflectionAccessFilter.FilterResult;
+import com.google.gson.internal.reflect.ReflectionHelper;
+import com.google.gson.reflect.TypeToken;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentNavigableMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+
+/** Returns a function that can construct an instance of a requested type. */
+public final class ConstructorConstructor {
+  private final Map&lt;Type, InstanceCreator&lt;?&gt;&gt; instanceCreators;
+  private final boolean useJdkUnsafe;
+  private final List&lt;ReflectionAccessFilter&gt; reflectionFilters;
+
+  public ConstructorConstructor(
+      Map&lt;Type, InstanceCreator&lt;?&gt;&gt; instanceCreators,
+      boolean useJdkUnsafe,
+<span class="fc" id="L59">      List&lt;ReflectionAccessFilter&gt; reflectionFilters) {</span>
+<span class="fc" id="L60">    this.instanceCreators = instanceCreators;</span>
+<span class="fc" id="L61">    this.useJdkUnsafe = useJdkUnsafe;</span>
+<span class="fc" id="L62">    this.reflectionFilters = reflectionFilters;</span>
+<span class="fc" id="L63">  }</span>
+
+  /**
+   * Check if the class can be instantiated by Unsafe allocator. If the instance has interface or
+   * abstract modifiers return an exception message.
+   *
+   * @param c instance of the class to be checked
+   * @return if instantiable {@code null}, else a non-{@code null} exception message
+   */
+  static String checkInstantiable(Class&lt;?&gt; c) {
+<span class="fc" id="L73">    int modifiers = c.getModifiers();</span>
+<span class="fc bfc" id="L74" title="All 2 branches covered.">    if (Modifier.isInterface(modifiers)) {</span>
+<span class="fc" id="L75">      return &quot;Interfaces can't be instantiated! Register an InstanceCreator&quot;</span>
+          + &quot; or a TypeAdapter for this type. Interface name: &quot;
+<span class="fc" id="L77">          + c.getName();</span>
+    }
+<span class="fc bfc" id="L79" title="All 2 branches covered.">    if (Modifier.isAbstract(modifiers)) {</span>
+      // R8 performs aggressive optimizations where it removes the default constructor of a class
+      // and makes the class `abstract`; check for that here explicitly
+      /*
+       * Note: Ideally should only show this R8-specific message when it is clear that R8 was
+       * used (e.g. when `c.getDeclaredConstructors().length == 0`), but on Android where this
+       * issue with R8 occurs most, R8 seems to keep some constructors for some reason while
+       * still making the class abstract
+       */
+<span class="fc" id="L88">      return &quot;Abstract classes can't be instantiated! Adjust the R8 configuration or register&quot;</span>
+          + &quot; an InstanceCreator or a TypeAdapter for this type. Class name: &quot;
+<span class="fc" id="L90">          + c.getName()</span>
+          + &quot;\nSee &quot;
+<span class="fc" id="L92">          + TroubleshootingGuide.createUrl(&quot;r8-abstract-class&quot;);</span>
+    }
+<span class="fc" id="L94">    return null;</span>
+  }
+
+  public &lt;T&gt; ObjectConstructor&lt;T&gt; get(TypeToken&lt;T&gt; typeToken) {
+<span class="fc" id="L98">    Type type = typeToken.getType();</span>
+<span class="fc" id="L99">    Class&lt;? super T&gt; rawType = typeToken.getRawType();</span>
+
+    // first try an instance creator
+
+    @SuppressWarnings(&quot;unchecked&quot;) // types must agree
+<span class="fc" id="L104">    InstanceCreator&lt;T&gt; typeCreator = (InstanceCreator&lt;T&gt;) instanceCreators.get(type);</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">    if (typeCreator != null) {</span>
+<span class="fc" id="L106">      return () -&gt; typeCreator.createInstance(type);</span>
+    }
+
+    // Next try raw type match for instance creators
+    @SuppressWarnings(&quot;unchecked&quot;) // types must agree
+<span class="fc" id="L111">    InstanceCreator&lt;T&gt; rawTypeCreator = (InstanceCreator&lt;T&gt;) instanceCreators.get(rawType);</span>
+<span class="fc bfc" id="L112" title="All 2 branches covered.">    if (rawTypeCreator != null) {</span>
+<span class="fc" id="L113">      return () -&gt; rawTypeCreator.createInstance(type);</span>
+    }
+
+    // First consider special constructors before checking for no-args constructors
+    // below to avoid matching internal no-args constructors which might be added in
+    // future JDK versions
+<span class="fc" id="L119">    ObjectConstructor&lt;T&gt; specialConstructor = newSpecialCollectionConstructor(type, rawType);</span>
+<span class="fc bfc" id="L120" title="All 2 branches covered.">    if (specialConstructor != null) {</span>
+<span class="fc" id="L121">      return specialConstructor;</span>
+    }
+
+<span class="fc" id="L124">    FilterResult filterResult =</span>
+<span class="fc" id="L125">        ReflectionAccessFilterHelper.getFilterResult(reflectionFilters, rawType);</span>
+<span class="fc" id="L126">    ObjectConstructor&lt;T&gt; defaultConstructor = newDefaultConstructor(rawType, filterResult);</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">    if (defaultConstructor != null) {</span>
+<span class="fc" id="L128">      return defaultConstructor;</span>
+    }
+
+<span class="fc" id="L131">    ObjectConstructor&lt;T&gt; defaultImplementation = newDefaultImplementationConstructor(type, rawType);</span>
+<span class="fc bfc" id="L132" title="All 2 branches covered.">    if (defaultImplementation != null) {</span>
+<span class="fc" id="L133">      return defaultImplementation;</span>
+    }
+
+    // Check whether type is instantiable; otherwise ReflectionAccessFilter recommendation
+    // of adjusting filter suggested below is irrelevant since it would not solve the problem
+<span class="fc" id="L138">    String exceptionMessage = checkInstantiable(rawType);</span>
+<span class="fc bfc" id="L139" title="All 2 branches covered.">    if (exceptionMessage != null) {</span>
+<span class="fc" id="L140">      return () -&gt; {</span>
+<span class="fc" id="L141">        throw new JsonIOException(exceptionMessage);</span>
+      };
+    }
+
+    // Consider usage of Unsafe as reflection, so don't use if BLOCK_ALL
+    // Additionally, since it is not calling any constructor at all, don't use if BLOCK_INACCESSIBLE
+<span class="fc bfc" id="L147" title="All 2 branches covered.">    if (filterResult == FilterResult.ALLOW) {</span>
+      // finally try unsafe
+<span class="fc" id="L149">      return newUnsafeAllocator(rawType);</span>
+    } else {
+<span class="fc" id="L151">      String message =</span>
+          &quot;Unable to create instance of &quot;
+              + rawType
+              + &quot;; ReflectionAccessFilter does not permit using reflection or Unsafe. Register an&quot;
+              + &quot; InstanceCreator or a TypeAdapter for this type or adjust the access filter to&quot;
+              + &quot; allow using reflection.&quot;;
+<span class="fc" id="L157">      return () -&gt; {</span>
+<span class="fc" id="L158">        throw new JsonIOException(message);</span>
+      };
+    }
+  }
+
+  /**
+   * Creates constructors for special JDK collection types which do not have a public no-args
+   * constructor.
+   */
+  private static &lt;T&gt; ObjectConstructor&lt;T&gt; newSpecialCollectionConstructor(
+      Type type, Class&lt;? super T&gt; rawType) {
+<span class="fc bfc" id="L169" title="All 2 branches covered.">    if (EnumSet.class.isAssignableFrom(rawType)) {</span>
+<span class="fc" id="L170">      return () -&gt; {</span>
+<span class="pc bpc" id="L171" title="1 of 2 branches missed.">        if (type instanceof ParameterizedType) {</span>
+<span class="fc" id="L172">          Type elementType = ((ParameterizedType) type).getActualTypeArguments()[0];</span>
+<span class="pc bpc" id="L173" title="1 of 2 branches missed.">          if (elementType instanceof Class) {</span>
+            @SuppressWarnings({&quot;unchecked&quot;, &quot;rawtypes&quot;})
+<span class="fc" id="L175">            T set = (T) EnumSet.noneOf((Class) elementType);</span>
+<span class="fc" id="L176">            return set;</span>
+          } else {
+<span class="nc" id="L178">            throw new JsonIOException(&quot;Invalid EnumSet type: &quot; + type.toString());</span>
+          }
+        } else {
+<span class="nc" id="L181">          throw new JsonIOException(&quot;Invalid EnumSet type: &quot; + type.toString());</span>
+        }
+      };
+    }
+    // Only support creation of EnumMap, but not of custom subtypes; for them type parameters
+    // and constructor parameter might have completely different meaning
+<span class="fc bfc" id="L187" title="All 2 branches covered.">    else if (rawType == EnumMap.class) {</span>
+<span class="fc" id="L188">      return () -&gt; {</span>
+<span class="pc bpc" id="L189" title="1 of 2 branches missed.">        if (type instanceof ParameterizedType) {</span>
+<span class="fc" id="L190">          Type elementType = ((ParameterizedType) type).getActualTypeArguments()[0];</span>
+<span class="pc bpc" id="L191" title="1 of 2 branches missed.">          if (elementType instanceof Class) {</span>
+            @SuppressWarnings({&quot;unchecked&quot;, &quot;rawtypes&quot;})
+<span class="fc" id="L193">            T map = (T) new EnumMap((Class) elementType);</span>
+<span class="fc" id="L194">            return map;</span>
+          } else {
+<span class="nc" id="L196">            throw new JsonIOException(&quot;Invalid EnumMap type: &quot; + type.toString());</span>
+          }
+        } else {
+<span class="nc" id="L199">          throw new JsonIOException(&quot;Invalid EnumMap type: &quot; + type.toString());</span>
+        }
+      };
+    }
+
+<span class="fc" id="L204">    return null;</span>
+  }
+
+  private static &lt;T&gt; ObjectConstructor&lt;T&gt; newDefaultConstructor(
+      Class&lt;? super T&gt; rawType, FilterResult filterResult) {
+    // Cannot invoke constructor of abstract class
+<span class="fc bfc" id="L210" title="All 2 branches covered.">    if (Modifier.isAbstract(rawType.getModifiers())) {</span>
+<span class="fc" id="L211">      return null;</span>
+    }
+
+    Constructor&lt;? super T&gt; constructor;
+    try {
+<span class="fc" id="L216">      constructor = rawType.getDeclaredConstructor();</span>
+<span class="fc" id="L217">    } catch (NoSuchMethodException e) {</span>
+<span class="fc" id="L218">      return null;</span>
+<span class="fc" id="L219">    }</span>
+
+<span class="fc bfc" id="L221" title="All 2 branches covered.">    boolean canAccess =</span>
+        filterResult == FilterResult.ALLOW
+<span class="fc bfc" id="L223" title="All 4 branches covered.">            || (ReflectionAccessFilterHelper.canAccess(constructor, null)</span>
+                // Be a bit more lenient here for BLOCK_ALL; if constructor is accessible and public
+                // then allow calling it
+                &amp;&amp; (filterResult != FilterResult.BLOCK_ALL
+<span class="pc bpc" id="L227" title="1 of 2 branches missed.">                    || Modifier.isPublic(constructor.getModifiers())));</span>
+
+<span class="fc bfc" id="L229" title="All 2 branches covered.">    if (!canAccess) {</span>
+<span class="fc" id="L230">      String message =</span>
+          &quot;Unable to invoke no-args constructor of &quot;
+              + rawType
+              + &quot;;&quot;
+              + &quot; constructor is not accessible and ReflectionAccessFilter does not permit making&quot;
+              + &quot; it accessible. Register an InstanceCreator or a TypeAdapter for this type, change&quot;
+              + &quot; the visibility of the constructor or adjust the access filter.&quot;;
+<span class="fc" id="L237">      return () -&gt; {</span>
+<span class="fc" id="L238">        throw new JsonIOException(message);</span>
+      };
+    }
+
+    // Only try to make accessible if allowed; in all other cases checks above should
+    // have verified that constructor is accessible
+<span class="fc bfc" id="L244" title="All 2 branches covered.">    if (filterResult == FilterResult.ALLOW) {</span>
+<span class="fc" id="L245">      String exceptionMessage = ReflectionHelper.tryMakeAccessible(constructor);</span>
+<span class="fc bfc" id="L246" title="All 2 branches covered.">      if (exceptionMessage != null) {</span>
+        /*
+         * Create ObjectConstructor which throws exception.
+         * This keeps backward compatibility (compared to returning `null` which
+         * would then choose another way of creating object).
+         * And it supports types which are only serialized but not deserialized
+         * (compared to directly throwing exception here), e.g. when runtime type
+         * of object is inaccessible, but compile-time type is accessible.
+         */
+<span class="fc" id="L255">        return () -&gt; {</span>
+          // New exception is created every time to avoid keeping reference
+          // to exception with potentially long stack trace, causing a
+          // memory leak
+<span class="fc" id="L259">          throw new JsonIOException(exceptionMessage);</span>
+        };
+      }
+    }
+
+<span class="fc" id="L264">    return () -&gt; {</span>
+      try {
+        @SuppressWarnings(&quot;unchecked&quot;) // T is the same raw type as is requested
+<span class="fc" id="L267">        T newInstance = (T) constructor.newInstance();</span>
+<span class="fc" id="L268">        return newInstance;</span>
+      }
+      // Note: InstantiationException should be impossible because check at start of method made
+      // sure that class is not abstract
+<span class="nc" id="L272">      catch (InstantiationException e) {</span>
+<span class="nc" id="L273">        throw new RuntimeException(</span>
+            &quot;Failed to invoke constructor '&quot;
+<span class="nc" id="L275">                + ReflectionHelper.constructorToString(constructor)</span>
+                + &quot;' with no args&quot;,
+            e);
+<span class="fc" id="L278">      } catch (InvocationTargetException e) {</span>
+        // TODO: don't wrap if cause is unchecked?
+        // TODO: JsonParseException ?
+<span class="fc" id="L281">        throw new RuntimeException(</span>
+            &quot;Failed to invoke constructor '&quot;
+<span class="fc" id="L283">                + ReflectionHelper.constructorToString(constructor)</span>
+                + &quot;' with no args&quot;,
+<span class="fc" id="L285">            e.getCause());</span>
+<span class="nc" id="L286">      } catch (IllegalAccessException e) {</span>
+<span class="nc" id="L287">        throw ReflectionHelper.createExceptionForUnexpectedIllegalAccess(e);</span>
+      }
+    };
+  }
+
+  /** Constructors for common interface types like Map and List and their subtypes. */
+  @SuppressWarnings(&quot;unchecked&quot;) // use runtime checks to guarantee that 'T' is what it is
+  private static &lt;T&gt; ObjectConstructor&lt;T&gt; newDefaultImplementationConstructor(
+      Type type, Class&lt;? super T&gt; rawType) {
+
+    /*
+     * IMPORTANT: Must only create instances for classes with public no-args constructor.
+     * For classes with special constructors / factory methods (e.g. EnumSet)
+     * `newSpecialCollectionConstructor` defined above must be used, to avoid no-args
+     * constructor check (which is called before this method) detecting internal no-args
+     * constructors which might be added in a future JDK version
+     */
+
+<span class="fc bfc" id="L305" title="All 2 branches covered.">    if (Collection.class.isAssignableFrom(rawType)) {</span>
+<span class="fc bfc" id="L306" title="All 2 branches covered.">      if (SortedSet.class.isAssignableFrom(rawType)) {</span>
+<span class="fc" id="L307">        return () -&gt; (T) new TreeSet&lt;&gt;();</span>
+<span class="fc bfc" id="L308" title="All 2 branches covered.">      } else if (Set.class.isAssignableFrom(rawType)) {</span>
+<span class="fc" id="L309">        return () -&gt; (T) new LinkedHashSet&lt;&gt;();</span>
+<span class="fc bfc" id="L310" title="All 2 branches covered.">      } else if (Queue.class.isAssignableFrom(rawType)) {</span>
+<span class="fc" id="L311">        return () -&gt; (T) new ArrayDeque&lt;&gt;();</span>
+      } else {
+<span class="fc" id="L313">        return () -&gt; (T) new ArrayList&lt;&gt;();</span>
+      }
+    }
+
+<span class="fc bfc" id="L317" title="All 2 branches covered.">    if (Map.class.isAssignableFrom(rawType)) {</span>
+<span class="fc bfc" id="L318" title="All 2 branches covered.">      if (ConcurrentNavigableMap.class.isAssignableFrom(rawType)) {</span>
+<span class="fc" id="L319">        return () -&gt; (T) new ConcurrentSkipListMap&lt;&gt;();</span>
+<span class="fc bfc" id="L320" title="All 2 branches covered.">      } else if (ConcurrentMap.class.isAssignableFrom(rawType)) {</span>
+<span class="fc" id="L321">        return () -&gt; (T) new ConcurrentHashMap&lt;&gt;();</span>
+<span class="fc bfc" id="L322" title="All 2 branches covered.">      } else if (SortedMap.class.isAssignableFrom(rawType)) {</span>
+<span class="fc" id="L323">        return () -&gt; (T) new TreeMap&lt;&gt;();</span>
+<span class="fc bfc" id="L324" title="All 2 branches covered.">      } else if (type instanceof ParameterizedType</span>
+<span class="fc bfc" id="L325" title="All 2 branches covered.">          &amp;&amp; !String.class.isAssignableFrom(</span>
+<span class="fc" id="L326">              TypeToken.get(((ParameterizedType) type).getActualTypeArguments()[0]).getRawType())) {</span>
+<span class="fc" id="L327">        return () -&gt; (T) new LinkedHashMap&lt;&gt;();</span>
+      } else {
+<span class="fc" id="L329">        return () -&gt; (T) new LinkedTreeMap&lt;&gt;();</span>
+      }
+    }
+
+<span class="fc" id="L333">    return null;</span>
+  }
+
+  private &lt;T&gt; ObjectConstructor&lt;T&gt; newUnsafeAllocator(Class&lt;? super T&gt; rawType) {
+<span class="fc bfc" id="L337" title="All 2 branches covered.">    if (useJdkUnsafe) {</span>
+<span class="fc" id="L338">      return () -&gt; {</span>
+        try {
+          @SuppressWarnings(&quot;unchecked&quot;)
+<span class="fc" id="L341">          T newInstance = (T) UnsafeAllocator.INSTANCE.newInstance(rawType);</span>
+<span class="fc" id="L342">          return newInstance;</span>
+<span class="nc" id="L343">        } catch (Exception e) {</span>
+<span class="nc" id="L344">          throw new RuntimeException(</span>
+              (&quot;Unable to create instance of &quot;
+                  + rawType
+                  + &quot;. Registering an InstanceCreator or a TypeAdapter for this type, or adding a&quot;
+                  + &quot; no-args constructor may fix this problem.&quot;),
+              e);
+        }
+      };
+    } else {
+<span class="fc" id="L353">      String exceptionMessage =</span>
+          &quot;Unable to create instance of &quot;
+              + rawType
+              + &quot;; usage of JDK Unsafe is disabled. Registering an InstanceCreator or a TypeAdapter&quot;
+              + &quot; for this type, adding a no-args constructor, or enabling usage of JDK Unsafe may&quot;
+              + &quot; fix this problem.&quot;;
+
+      // Check if R8 removed all constructors
+<span class="pc bpc" id="L361" title="1 of 2 branches missed.">      if (rawType.getDeclaredConstructors().length == 0) {</span>
+        // R8 with Unsafe disabled might not be common enough to warrant a separate Troubleshooting
+        // Guide entry
+<span class="nc" id="L364">        exceptionMessage +=</span>
+            &quot; Or adjust your R8 configuration to keep the no-args constructor of the class.&quot;;
+      }
+
+      // Separate effectively final variable to allow usage in the lambda below
+<span class="fc" id="L369">      String exceptionMessageF = exceptionMessage;</span>
+
+<span class="fc" id="L371">      return () -&gt; {</span>
+<span class="fc" id="L372">        throw new JsonIOException(exceptionMessageF);</span>
+      };
+    }
+  }
+
+  @Override
+  public String toString() {
+<span class="nc" id="L379">    return instanceCreators.toString();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

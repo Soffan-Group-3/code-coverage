@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReflectionAccessFilter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson</a> &gt; <span class="el_source">ReflectionAccessFilter.java</span></div><h1>ReflectionAccessFilter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2022 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson;
+
+import com.google.gson.internal.ReflectionAccessFilterHelper;
+import java.lang.reflect.AccessibleObject;
+
+/**
+ * Filter for determining whether reflection based serialization and deserialization is allowed for
+ * a class.
+ *
+ * &lt;p&gt;A filter can be useful in multiple scenarios, for example when upgrading to newer Java
+ * versions which use the Java Platform Module System (JPMS). A filter then allows to {@linkplain
+ * FilterResult#BLOCK_INACCESSIBLE prevent making inaccessible members accessible}, even if the used
+ * Java version might still allow illegal access (but logs a warning), or if {@code java} command
+ * line arguments are used to open the inaccessible packages to other parts of the application. This
+ * interface defines some convenience filters for this task, such as {@link
+ * #BLOCK_INACCESSIBLE_JAVA}.
+ *
+ * &lt;p&gt;A filter can also be useful to prevent mixing model classes of a project with other non-model
+ * classes; the filter could {@linkplain FilterResult#BLOCK_ALL block all reflective access} to
+ * non-model classes.
+ *
+ * &lt;p&gt;A reflection access filter is similar to an {@link ExclusionStrategy} with the major
+ * difference that a filter will cause an exception to be thrown when access is disallowed while an
+ * exclusion strategy just skips fields and classes.
+ *
+ * @see GsonBuilder#addReflectionAccessFilter(ReflectionAccessFilter)
+ * @since 2.9.1
+ */
+public interface ReflectionAccessFilter {
+  /**
+   * Result of a filter check.
+   *
+   * @since 2.9.1
+   */
+<span class="fc" id="L51">  enum FilterResult {</span>
+    /**
+     * Reflection access for the class is allowed.
+     *
+     * &lt;p&gt;Note that this does not affect the Java access checks in any way, it only permits Gson to
+     * try using reflection for a class. The Java runtime might still deny such access.
+     */
+<span class="fc" id="L58">    ALLOW,</span>
+    /**
+     * The filter is indecisive whether reflection access should be allowed. The next registered
+     * filter will be consulted to get the result. If there is no next filter, this result acts like
+     * {@link #ALLOW}.
+     */
+<span class="fc" id="L64">    INDECISIVE,</span>
+    /**
+     * Blocks reflection access if a member of the class is not accessible by default and would have
+     * to be made accessible. This is unaffected by any {@code java} command line arguments being
+     * used to make packages accessible, or by module declaration directives which &lt;i&gt;open&lt;/i&gt; the
+     * complete module or certain packages for reflection and will consider such packages
+     * inaccessible.
+     *
+     * &lt;p&gt;Note that this &lt;b&gt;only works for Java 9 and higher&lt;/b&gt;, for older Java versions its
+     * functionality will be limited and it might behave like {@link #ALLOW}. Access checks are only
+     * performed as defined by the Java Language Specification (&lt;a
+     * href=&quot;https://docs.oracle.com/javase/specs/jls/se11/html/jls-6.html#jls-6.6&quot;&gt;JLS 11
+     * &amp;sect;6.6&lt;/a&gt;), restrictions imposed by a {@link SecurityManager} are not considered.
+     *
+     * &lt;p&gt;This result type is mainly intended to help enforce the access checks of the Java Platform
+     * Module System. It allows detecting illegal access, even if the used Java version would only
+     * log a warning, or is configured to open packages for reflection using command line arguments.
+     *
+     * @see AccessibleObject#canAccess(Object)
+     */
+<span class="fc" id="L84">    BLOCK_INACCESSIBLE,</span>
+    /**
+     * Blocks all reflection access for the class. Other means for serializing and deserializing the
+     * class, such as a {@link TypeAdapter}, have to be used.
+     */
+<span class="fc" id="L89">    BLOCK_ALL</span>
+  }
+
+  /**
+   * Blocks all reflection access to members of standard Java classes which are not accessible by
+   * default. However, reflection access is still allowed for classes for which all fields are
+   * accessible and which have an accessible no-args constructor (or for which an {@link
+   * InstanceCreator} has been registered).
+   *
+   * &lt;p&gt;If this filter encounters a class other than a standard Java class it returns {@link
+   * FilterResult#INDECISIVE}.
+   *
+   * &lt;p&gt;This filter is mainly intended to help enforcing the access checks of Java Platform Module
+   * System. It allows detecting illegal access, even if the used Java version would only log a
+   * warning, or is configured to open packages for reflection. However, this filter &lt;b&gt;only works
+   * for Java 9 and higher&lt;/b&gt;, when using an older Java version its functionality will be limited.
+   *
+   * &lt;p&gt;Note that this filter might not cover all standard Java classes. Currently only classes in a
+   * {@code java.*} or {@code javax.*} package are considered. The set of detected classes might be
+   * expanded in the future without prior notice.
+   *
+   * @see FilterResult#BLOCK_INACCESSIBLE
+   */
+<span class="fc" id="L112">  ReflectionAccessFilter BLOCK_INACCESSIBLE_JAVA =</span>
+<span class="fc" id="L113">      new ReflectionAccessFilter() {</span>
+        @Override
+        public FilterResult check(Class&lt;?&gt; rawClass) {
+<span class="fc bfc" id="L116" title="All 2 branches covered.">          return ReflectionAccessFilterHelper.isJavaType(rawClass)</span>
+<span class="fc" id="L117">              ? FilterResult.BLOCK_INACCESSIBLE</span>
+<span class="fc" id="L118">              : FilterResult.INDECISIVE;</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="fc" id="L123">          return &quot;ReflectionAccessFilter#BLOCK_INACCESSIBLE_JAVA&quot;;</span>
+        }
+      };
+
+  /**
+   * Blocks all reflection access to members of standard Java classes.
+   *
+   * &lt;p&gt;If this filter encounters a class other than a standard Java class it returns {@link
+   * FilterResult#INDECISIVE}.
+   *
+   * &lt;p&gt;This filter is mainly intended to prevent depending on implementation details of the Java
+   * platform and to help applications prepare for upgrading to the Java Platform Module System.
+   *
+   * &lt;p&gt;Note that this filter might not cover all standard Java classes. Currently only classes in a
+   * {@code java.*} or {@code javax.*} package are considered. The set of detected classes might be
+   * expanded in the future without prior notice.
+   *
+   * @see #BLOCK_INACCESSIBLE_JAVA
+   * @see FilterResult#BLOCK_ALL
+   */
+<span class="fc" id="L143">  ReflectionAccessFilter BLOCK_ALL_JAVA =</span>
+<span class="fc" id="L144">      new ReflectionAccessFilter() {</span>
+        @Override
+        public FilterResult check(Class&lt;?&gt; rawClass) {
+<span class="fc bfc" id="L147" title="All 2 branches covered.">          return ReflectionAccessFilterHelper.isJavaType(rawClass)</span>
+<span class="fc" id="L148">              ? FilterResult.BLOCK_ALL</span>
+<span class="fc" id="L149">              : FilterResult.INDECISIVE;</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="fc" id="L154">          return &quot;ReflectionAccessFilter#BLOCK_ALL_JAVA&quot;;</span>
+        }
+      };
+
+  /**
+   * Blocks all reflection access to members of standard Android classes.
+   *
+   * &lt;p&gt;If this filter encounters a class other than a standard Android class it returns {@link
+   * FilterResult#INDECISIVE}.
+   *
+   * &lt;p&gt;This filter is mainly intended to prevent depending on implementation details of the Android
+   * platform.
+   *
+   * &lt;p&gt;Note that this filter might not cover all standard Android classes. Currently only classes
+   * in an {@code android.*} or {@code androidx.*} package, and standard Java classes in a {@code
+   * java.*} or {@code javax.*} package are considered. The set of detected classes might be
+   * expanded in the future without prior notice.
+   *
+   * @see FilterResult#BLOCK_ALL
+   */
+<span class="fc" id="L174">  ReflectionAccessFilter BLOCK_ALL_ANDROID =</span>
+<span class="fc" id="L175">      new ReflectionAccessFilter() {</span>
+        @Override
+        public FilterResult check(Class&lt;?&gt; rawClass) {
+<span class="nc bnc" id="L178" title="All 2 branches missed.">          return ReflectionAccessFilterHelper.isAndroidType(rawClass)</span>
+<span class="nc" id="L179">              ? FilterResult.BLOCK_ALL</span>
+<span class="nc" id="L180">              : FilterResult.INDECISIVE;</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="fc" id="L185">          return &quot;ReflectionAccessFilter#BLOCK_ALL_ANDROID&quot;;</span>
+        }
+      };
+
+  /**
+   * Blocks all reflection access to members of classes belonging to programming language platforms,
+   * such as Java, Android, Kotlin or Scala.
+   *
+   * &lt;p&gt;If this filter encounters a class other than a standard platform class it returns {@link
+   * FilterResult#INDECISIVE}.
+   *
+   * &lt;p&gt;This filter is mainly intended to prevent depending on implementation details of the
+   * platform classes.
+   *
+   * &lt;p&gt;Note that this filter might not cover all platform classes. Currently it combines the
+   * filters {@link #BLOCK_ALL_JAVA} and {@link #BLOCK_ALL_ANDROID}, and checks for other
+   * language-specific platform classes like {@code kotlin.*}. The set of detected classes might be
+   * expanded in the future without prior notice.
+   *
+   * @see FilterResult#BLOCK_ALL
+   */
+<span class="fc" id="L206">  ReflectionAccessFilter BLOCK_ALL_PLATFORM =</span>
+<span class="fc" id="L207">      new ReflectionAccessFilter() {</span>
+        @Override
+        public FilterResult check(Class&lt;?&gt; rawClass) {
+<span class="nc bnc" id="L210" title="All 2 branches missed.">          return ReflectionAccessFilterHelper.isAnyPlatformType(rawClass)</span>
+<span class="nc" id="L211">              ? FilterResult.BLOCK_ALL</span>
+<span class="nc" id="L212">              : FilterResult.INDECISIVE;</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="fc" id="L217">          return &quot;ReflectionAccessFilter#BLOCK_ALL_PLATFORM&quot;;</span>
+        }
+      };
+
+  /**
+   * Checks if reflection access should be allowed for a class.
+   *
+   * @param rawClass Class to check
+   * @return Result indicating whether reflection access is allowed
+   */
+  FilterResult check(Class&lt;?&gt; rawClass);
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

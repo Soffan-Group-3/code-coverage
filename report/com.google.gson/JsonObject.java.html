@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>JsonObject.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson</a> &gt; <span class="el_source">JsonObject.java</span></div><h1>JsonObject.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2008 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson;
+
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+import com.google.gson.internal.LinkedTreeMap;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * A class representing an object type in JSON. An object consists of name-value pairs where names
+ * are strings, and values are any other type of {@link JsonElement}. This allows for a creating a
+ * tree of JsonElements. The member elements of this object are maintained in order they were added.
+ * This class does not support {@code null} values. If {@code null} is provided as value argument to
+ * any of the methods, it is converted to a {@link JsonNull}.
+ *
+ * &lt;p&gt;{@code JsonObject} does not implement the {@link Map} interface, but a {@code Map} view of it
+ * can be obtained with {@link #asMap()}.
+ *
+ * &lt;p&gt;See the {@link JsonElement} documentation for details on how to convert {@code JsonObject} and
+ * generally any {@code JsonElement} from and to JSON.
+ *
+ * @author Inderjeet Singh
+ * @author Joel Leitch
+ */
+public final class JsonObject extends JsonElement {
+<span class="fc" id="L41">  private final LinkedTreeMap&lt;String, JsonElement&gt; members = new LinkedTreeMap&lt;&gt;(false);</span>
+
+  /** Creates an empty JsonObject. */
+  @SuppressWarnings(&quot;deprecation&quot;) // superclass constructor
+<span class="fc" id="L45">  public JsonObject() {}</span>
+
+  /**
+   * Creates a deep copy of this element and all its children.
+   *
+   * @since 2.8.2
+   */
+  @Override
+  public JsonObject deepCopy() {
+<span class="fc" id="L54">    JsonObject result = new JsonObject();</span>
+<span class="fc bfc" id="L55" title="All 2 branches covered.">    for (Map.Entry&lt;String, JsonElement&gt; entry : members.entrySet()) {</span>
+<span class="fc" id="L56">      result.add(entry.getKey(), entry.getValue().deepCopy());</span>
+<span class="fc" id="L57">    }</span>
+<span class="fc" id="L58">    return result;</span>
+  }
+
+  /**
+   * Adds a member, which is a name-value pair, to self. The name must be a String, but the value
+   * can be an arbitrary {@link JsonElement}, thereby allowing you to build a full tree of
+   * JsonElements rooted at this node.
+   *
+   * @param property name of the member.
+   * @param value the member object.
+   */
+  public void add(String property, JsonElement value) {
+<span class="fc bfc" id="L70" title="All 2 branches covered.">    members.put(property, value == null ? JsonNull.INSTANCE : value);</span>
+<span class="fc" id="L71">  }</span>
+
+  /**
+   * Removes the {@code property} from this object.
+   *
+   * @param property name of the member that should be removed.
+   * @return the {@link JsonElement} object that is being removed, or {@code null} if no member with
+   *     this name exists.
+   * @since 1.3
+   */
+  @CanIgnoreReturnValue
+  public JsonElement remove(String property) {
+<span class="fc" id="L83">    return members.remove(property);</span>
+  }
+
+  /**
+   * Convenience method to add a string member. The specified value is converted to a {@link
+   * JsonPrimitive} of String.
+   *
+   * @param property name of the member.
+   * @param value the string value associated with the member.
+   */
+  public void addProperty(String property, String value) {
+<span class="fc bfc" id="L94" title="All 2 branches covered.">    add(property, value == null ? JsonNull.INSTANCE : new JsonPrimitive(value));</span>
+<span class="fc" id="L95">  }</span>
+
+  /**
+   * Convenience method to add a number member. The specified value is converted to a {@link
+   * JsonPrimitive} of Number.
+   *
+   * @param property name of the member.
+   * @param value the number value associated with the member.
+   */
+  public void addProperty(String property, Number value) {
+<span class="pc bpc" id="L105" title="1 of 2 branches missed.">    add(property, value == null ? JsonNull.INSTANCE : new JsonPrimitive(value));</span>
+<span class="fc" id="L106">  }</span>
+
+  /**
+   * Convenience method to add a boolean member. The specified value is converted to a {@link
+   * JsonPrimitive} of Boolean.
+   *
+   * @param property name of the member.
+   * @param value the boolean value associated with the member.
+   */
+  public void addProperty(String property, Boolean value) {
+<span class="pc bpc" id="L116" title="1 of 2 branches missed.">    add(property, value == null ? JsonNull.INSTANCE : new JsonPrimitive(value));</span>
+<span class="fc" id="L117">  }</span>
+
+  /**
+   * Convenience method to add a char member. The specified value is converted to a {@link
+   * JsonPrimitive} of Character.
+   *
+   * @param property name of the member.
+   * @param value the char value associated with the member.
+   */
+  public void addProperty(String property, Character value) {
+<span class="pc bpc" id="L127" title="1 of 2 branches missed.">    add(property, value == null ? JsonNull.INSTANCE : new JsonPrimitive(value));</span>
+<span class="fc" id="L128">  }</span>
+
+  /**
+   * Returns a set of members of this object. The set is ordered, and the order is in which the
+   * elements were added.
+   *
+   * @return a set of members of this object.
+   */
+  public Set&lt;Map.Entry&lt;String, JsonElement&gt;&gt; entrySet() {
+<span class="fc" id="L137">    return members.entrySet();</span>
+  }
+
+  /**
+   * Returns a set of members key values.
+   *
+   * @return a set of member keys as Strings
+   * @since 2.8.1
+   */
+  public Set&lt;String&gt; keySet() {
+<span class="fc" id="L147">    return members.keySet();</span>
+  }
+
+  /**
+   * Returns the number of key/value pairs in the object.
+   *
+   * @return the number of key/value pairs in the object.
+   * @since 2.7
+   */
+  public int size() {
+<span class="fc" id="L157">    return members.size();</span>
+  }
+
+  /**
+   * Returns true if the number of key/value pairs in the object is zero.
+   *
+   * @return true if the number of key/value pairs in the object is zero.
+   * @since 2.10.1
+   */
+  public boolean isEmpty() {
+<span class="fc" id="L167">    return members.isEmpty();</span>
+  }
+
+  /**
+   * Convenience method to check if a member with the specified name is present in this object.
+   *
+   * @param memberName name of the member that is being checked for presence.
+   * @return true if there is a member with the specified name, false otherwise.
+   */
+  public boolean has(String memberName) {
+<span class="fc" id="L177">    return members.containsKey(memberName);</span>
+  }
+
+  /**
+   * Returns the member with the specified name.
+   *
+   * @param memberName name of the member that is being requested.
+   * @return the member matching the name, or {@code null} if no such member exists.
+   */
+  public JsonElement get(String memberName) {
+<span class="fc" id="L187">    return members.get(memberName);</span>
+  }
+
+  /**
+   * Convenience method to get the specified member as a {@link JsonPrimitive}.
+   *
+   * @param memberName name of the member being requested.
+   * @return the {@code JsonPrimitive} corresponding to the specified member, or {@code null} if no
+   *     member with this name exists.
+   * @throws ClassCastException if the member is not of type {@code JsonPrimitive}.
+   */
+  public JsonPrimitive getAsJsonPrimitive(String memberName) {
+<span class="nc" id="L199">    return (JsonPrimitive) members.get(memberName);</span>
+  }
+
+  /**
+   * Convenience method to get the specified member as a {@link JsonArray}.
+   *
+   * @param memberName name of the member being requested.
+   * @return the {@code JsonArray} corresponding to the specified member, or {@code null} if no
+   *     member with this name exists.
+   * @throws ClassCastException if the member is not of type {@code JsonArray}.
+   */
+  public JsonArray getAsJsonArray(String memberName) {
+<span class="nc" id="L211">    return (JsonArray) members.get(memberName);</span>
+  }
+
+  /**
+   * Convenience method to get the specified member as a {@link JsonObject}.
+   *
+   * @param memberName name of the member being requested.
+   * @return the {@code JsonObject} corresponding to the specified member, or {@code null} if no
+   *     member with this name exists.
+   * @throws ClassCastException if the member is not of type {@code JsonObject}.
+   */
+  public JsonObject getAsJsonObject(String memberName) {
+<span class="nc" id="L223">    return (JsonObject) members.get(memberName);</span>
+  }
+
+  /**
+   * Returns a mutable {@link Map} view of this {@code JsonObject}. Changes to the {@code Map} are
+   * visible in this {@code JsonObject} and the other way around.
+   *
+   * &lt;p&gt;The {@code Map} does not permit {@code null} keys or values. Unlike {@code JsonObject}'s
+   * {@code null} handling, a {@link NullPointerException} is thrown when trying to add {@code
+   * null}. Use {@link JsonNull} for JSON null values.
+   *
+   * @return mutable {@code Map} view
+   * @since 2.10
+   */
+  public Map&lt;String, JsonElement&gt; asMap() {
+    // It is safe to expose the underlying map because it disallows null keys and values
+<span class="fc" id="L239">    return members;</span>
+  }
+
+  /**
+   * Returns whether the other object is equal to this. This method only considers the other object
+   * to be equal if it is an instance of {@code JsonObject} and has equal members, ignoring order.
+   */
+  @Override
+  public boolean equals(Object o) {
+<span class="fc bfc" id="L248" title="All 6 branches covered.">    return (o == this) || (o instanceof JsonObject &amp;&amp; ((JsonObject) o).members.equals(members));</span>
+  }
+
+  /**
+   * Returns the hash code of this object. This method calculates the hash code based on the members
+   * of this object, ignoring order.
+   */
+  @Override
+  public int hashCode() {
+<span class="fc" id="L257">    return members.hashCode();</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

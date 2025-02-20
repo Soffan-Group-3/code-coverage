@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DefaultDateTypeAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson.internal.bind</a> &gt; <span class="el_source">DefaultDateTypeAdapter.java</span></div><h1>DefaultDateTypeAdapter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2008 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.internal.bind;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.internal.JavaVersion;
+import com.google.gson.internal.PreJava9DateFormatProvider;
+import com.google.gson.internal.bind.util.ISO8601Utils;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
+import java.io.IOException;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.ParsePosition;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.TimeZone;
+
+/**
+ * This type adapter supports subclasses of date by defining a {@link
+ * DefaultDateTypeAdapter.DateType} and then using its {@code createAdapterFactory} methods.
+ *
+ * &lt;p&gt;&lt;b&gt;Important:&lt;/b&gt; Instances of this class (or rather the {@link SimpleDateFormat} they use)
+ * capture the current default {@link Locale} and {@link TimeZone} when they are created. Therefore
+ * avoid storing factories obtained from {@link DateType} in {@code static} fields, since they only
+ * create a single adapter instance and its behavior would then depend on when Gson classes are
+ * loaded first, and which default {@code Locale} and {@code TimeZone} was used at that point.
+ *
+ * @author Inderjeet Singh
+ * @author Joel Leitch
+ */
+public final class DefaultDateTypeAdapter&lt;T extends Date&gt; extends TypeAdapter&lt;T&gt; {
+  private static final String SIMPLE_NAME = &quot;DefaultDateTypeAdapter&quot;;
+
+  /** Factory for {@link Date} adapters which use {@link DateFormat#DEFAULT} as style. */
+<span class="fc" id="L59">  public static final TypeAdapterFactory DEFAULT_STYLE_FACTORY =</span>
+      // Because SimpleDateFormat captures the default TimeZone when it was created, let the factory
+      // always create new DefaultDateTypeAdapter instances (which are then cached by the Gson
+      // instances) instead of having a single static DefaultDateTypeAdapter instance
+      // Otherwise the behavior would depend on when an application first loads Gson classes and
+      // which default TimeZone is set at that point, which would be quite brittle
+<span class="fc" id="L65">      new TypeAdapterFactory() {</span>
+        @SuppressWarnings(&quot;unchecked&quot;) // we use a runtime check to make sure the 'T's equal
+        @Override
+        public &lt;T&gt; TypeAdapter&lt;T&gt; create(Gson gson, TypeToken&lt;T&gt; typeToken) {
+<span class="fc bfc" id="L69" title="All 2 branches covered.">          return typeToken.getRawType() == Date.class</span>
+<span class="fc" id="L70">              ? (TypeAdapter&lt;T&gt;)</span>
+                  new DefaultDateTypeAdapter&lt;&gt;(
+                      DateType.DATE, DateFormat.DEFAULT, DateFormat.DEFAULT)
+<span class="fc" id="L73">              : null;</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="nc" id="L78">          return &quot;DefaultDateTypeAdapter#DEFAULT_STYLE_FACTORY&quot;;</span>
+        }
+      };
+
+  public abstract static class DateType&lt;T extends Date&gt; {
+<span class="fc" id="L83">    public static final DateType&lt;Date&gt; DATE =</span>
+<span class="fc" id="L84">        new DateType&lt;Date&gt;(Date.class) {</span>
+          @Override
+          protected Date deserialize(Date date) {
+<span class="fc" id="L87">            return date;</span>
+          }
+        };
+
+    private final Class&lt;T&gt; dateClass;
+
+<span class="fc" id="L93">    protected DateType(Class&lt;T&gt; dateClass) {</span>
+<span class="fc" id="L94">      this.dateClass = dateClass;</span>
+<span class="fc" id="L95">    }</span>
+
+    protected abstract T deserialize(Date date);
+
+    private TypeAdapterFactory createFactory(DefaultDateTypeAdapter&lt;T&gt; adapter) {
+<span class="fc" id="L100">      return TypeAdapters.newFactory(dateClass, adapter);</span>
+    }
+
+    public final TypeAdapterFactory createAdapterFactory(String datePattern) {
+<span class="fc" id="L104">      return createFactory(new DefaultDateTypeAdapter&lt;&gt;(this, datePattern));</span>
+    }
+
+    public final TypeAdapterFactory createAdapterFactory(int dateStyle, int timeStyle) {
+<span class="fc" id="L108">      return createFactory(new DefaultDateTypeAdapter&lt;&gt;(this, dateStyle, timeStyle));</span>
+    }
+  }
+
+  private final DateType&lt;T&gt; dateType;
+
+  /**
+   * List of 1 or more different date formats used for de-serialization attempts. The first of them
+   * is used for serialization as well.
+   */
+<span class="fc" id="L118">  private final List&lt;DateFormat&gt; dateFormats = new ArrayList&lt;&gt;();</span>
+
+<span class="fc" id="L120">  private DefaultDateTypeAdapter(DateType&lt;T&gt; dateType, String datePattern) {</span>
+<span class="fc" id="L121">    this.dateType = Objects.requireNonNull(dateType);</span>
+<span class="fc" id="L122">    dateFormats.add(new SimpleDateFormat(datePattern, Locale.US));</span>
+<span class="fc bfc" id="L123" title="All 2 branches covered.">    if (!Locale.getDefault().equals(Locale.US)) {</span>
+<span class="fc" id="L124">      dateFormats.add(new SimpleDateFormat(datePattern));</span>
+    }
+<span class="fc" id="L126">  }</span>
+
+<span class="fc" id="L128">  private DefaultDateTypeAdapter(DateType&lt;T&gt; dateType, int dateStyle, int timeStyle) {</span>
+<span class="fc" id="L129">    this.dateType = Objects.requireNonNull(dateType);</span>
+<span class="fc" id="L130">    dateFormats.add(DateFormat.getDateTimeInstance(dateStyle, timeStyle, Locale.US));</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">    if (!Locale.getDefault().equals(Locale.US)) {</span>
+<span class="fc" id="L132">      dateFormats.add(DateFormat.getDateTimeInstance(dateStyle, timeStyle));</span>
+    }
+<span class="pc bpc" id="L134" title="1 of 2 branches missed.">    if (JavaVersion.isJava9OrLater()) {</span>
+<span class="fc" id="L135">      dateFormats.add(PreJava9DateFormatProvider.getUsDateTimeFormat(dateStyle, timeStyle));</span>
+    }
+<span class="fc" id="L137">  }</span>
+
+  @Override
+  public void write(JsonWriter out, Date value) throws IOException {
+<span class="fc bfc" id="L141" title="All 2 branches covered.">    if (value == null) {</span>
+<span class="fc" id="L142">      out.nullValue();</span>
+<span class="fc" id="L143">      return;</span>
+    }
+
+<span class="fc" id="L146">    DateFormat dateFormat = dateFormats.get(0);</span>
+    String dateFormatAsString;
+    // Needs to be synchronized since JDK DateFormat classes are not thread-safe
+<span class="fc" id="L149">    synchronized (dateFormats) {</span>
+<span class="fc" id="L150">      dateFormatAsString = dateFormat.format(value);</span>
+<span class="fc" id="L151">    }</span>
+<span class="fc" id="L152">    out.value(dateFormatAsString);</span>
+<span class="fc" id="L153">  }</span>
+
+  @Override
+  public T read(JsonReader in) throws IOException {
+<span class="fc bfc" id="L157" title="All 2 branches covered.">    if (in.peek() == JsonToken.NULL) {</span>
+<span class="fc" id="L158">      in.nextNull();</span>
+<span class="fc" id="L159">      return null;</span>
+    }
+<span class="fc" id="L161">    Date date = deserializeToDate(in);</span>
+<span class="fc" id="L162">    return dateType.deserialize(date);</span>
+  }
+
+  private Date deserializeToDate(JsonReader in) throws IOException {
+<span class="fc" id="L166">    String s = in.nextString();</span>
+    // Needs to be synchronized since JDK DateFormat classes are not thread-safe
+<span class="fc" id="L168">    synchronized (dateFormats) {</span>
+<span class="pc bpc" id="L169" title="1 of 2 branches missed.">      for (DateFormat dateFormat : dateFormats) {</span>
+<span class="fc" id="L170">        TimeZone originalTimeZone = dateFormat.getTimeZone();</span>
+        try {
+<span class="fc" id="L172">          return dateFormat.parse(s);</span>
+<span class="fc" id="L173">        } catch (ParseException ignored) {</span>
+          // OK: try the next format
+        } finally {
+<span class="fc" id="L176">          dateFormat.setTimeZone(originalTimeZone);</span>
+        }
+<span class="fc" id="L178">      }</span>
+<span class="nc" id="L179">    }</span>
+
+    try {
+<span class="nc" id="L182">      return ISO8601Utils.parse(s, new ParsePosition(0));</span>
+<span class="nc" id="L183">    } catch (ParseException e) {</span>
+<span class="nc" id="L184">      throw new JsonSyntaxException(</span>
+<span class="nc" id="L185">          &quot;Failed parsing '&quot; + s + &quot;' as Date; at path &quot; + in.getPreviousPath(), e);</span>
+    }
+  }
+
+  @Override
+  public String toString() {
+<span class="nc" id="L191">    DateFormat defaultFormat = dateFormats.get(0);</span>
+<span class="nc bnc" id="L192" title="All 2 branches missed.">    if (defaultFormat instanceof SimpleDateFormat) {</span>
+<span class="nc" id="L193">      return SIMPLE_NAME + '(' + ((SimpleDateFormat) defaultFormat).toPattern() + ')';</span>
+    } else {
+<span class="nc" id="L195">      return SIMPLE_NAME + '(' + defaultFormat.getClass().getSimpleName() + ')';</span>
+    }
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

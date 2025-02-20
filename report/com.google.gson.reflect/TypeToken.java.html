@@ -1,0 +1,454 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TypeToken.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson.reflect</a> &gt; <span class="el_source">TypeToken.java</span></div><h1>TypeToken.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2008 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.reflect;
+
+import com.google.gson.internal.$Gson$Types;
+import com.google.gson.internal.TroubleshootingGuide;
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+
+/**
+ * Represents a generic type {@code T}. Java doesn't yet provide a way to represent generic types,
+ * so this class does. Forces clients to create a subclass of this class which enables retrieval the
+ * type information even at runtime.
+ *
+ * &lt;p&gt;For example, to create a type literal for {@code List&lt;String&gt;}, you can create an empty
+ * anonymous class:
+ *
+ * &lt;p&gt;{@code TypeToken&lt;List&lt;String&gt;&gt; list = new TypeToken&lt;List&lt;String&gt;&gt;() {};}
+ *
+ * &lt;p&gt;Capturing a type variable as type argument of an anonymous {@code TypeToken} subclass is not
+ * allowed, for example {@code TypeToken&lt;List&lt;T&gt;&gt;}. Due to type erasure the runtime type of a type
+ * variable is not available to Gson and therefore it cannot provide the functionality one might
+ * expect. This would give a false sense of type-safety at compile time and could lead to an
+ * unexpected {@code ClassCastException} at runtime.
+ *
+ * &lt;p&gt;If the type arguments of the parameterized type are only available at runtime, for example
+ * when you want to create a {@code List&lt;E&gt;} based on a {@code Class&lt;E&gt;} representing the element
+ * type, the method {@link #getParameterized(Type, Type...)} can be used.
+ *
+ * @author Bob Lee
+ * @author Sven Mawson
+ * @author Jesse Wilson
+ */
+public class TypeToken&lt;T&gt; {
+  private final Class&lt;? super T&gt; rawType;
+  private final Type type;
+  private final int hashCode;
+
+  /**
+   * Constructs a new type literal. Derives represented class from type parameter.
+   *
+   * &lt;p&gt;Clients create an empty anonymous subclass. Doing so embeds the type parameter in the
+   * anonymous class's type hierarchy so we can reconstitute it at runtime despite erasure, for
+   * example:
+   *
+   * &lt;p&gt;{@code new TypeToken&lt;List&lt;String&gt;&gt;() {}}
+   *
+   * @throws IllegalArgumentException If the anonymous {@code TypeToken} subclass captures a type
+   *     variable, for example {@code TypeToken&lt;List&lt;T&gt;&gt;}. See the {@code TypeToken} class
+   *     documentation for more details.
+   */
+  @SuppressWarnings(&quot;unchecked&quot;)
+<span class="fc" id="L73">  protected TypeToken() {</span>
+<span class="fc" id="L74">    this.type = getTypeTokenTypeArgument();</span>
+<span class="fc" id="L75">    this.rawType = (Class&lt;? super T&gt;) $Gson$Types.getRawType(type);</span>
+<span class="fc" id="L76">    this.hashCode = type.hashCode();</span>
+<span class="fc" id="L77">  }</span>
+
+  /** Unsafe. Constructs a type literal manually. */
+  @SuppressWarnings(&quot;unchecked&quot;)
+<span class="fc" id="L81">  private TypeToken(Type type) {</span>
+<span class="fc" id="L82">    this.type = $Gson$Types.canonicalize(Objects.requireNonNull(type));</span>
+<span class="fc" id="L83">    this.rawType = (Class&lt;? super T&gt;) $Gson$Types.getRawType(this.type);</span>
+<span class="fc" id="L84">    this.hashCode = this.type.hashCode();</span>
+<span class="fc" id="L85">  }</span>
+
+  private static boolean isCapturingTypeVariablesForbidden() {
+<span class="pc bpc" id="L88" title="1 of 2 branches missed.">    return !Objects.equals(System.getProperty(&quot;gson.allowCapturingTypeVariables&quot;), &quot;true&quot;);</span>
+  }
+
+  /**
+   * Verifies that {@code this} is an instance of a direct subclass of TypeToken and returns the
+   * type argument for {@code T} in {@link $Gson$Types#canonicalize canonical form}.
+   */
+  private Type getTypeTokenTypeArgument() {
+<span class="fc" id="L96">    Type superclass = getClass().getGenericSuperclass();</span>
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">    if (superclass instanceof ParameterizedType) {</span>
+<span class="fc" id="L98">      ParameterizedType parameterized = (ParameterizedType) superclass;</span>
+<span class="pc bpc" id="L99" title="1 of 2 branches missed.">      if (parameterized.getRawType() == TypeToken.class) {</span>
+<span class="fc" id="L100">        Type typeArgument = $Gson$Types.canonicalize(parameterized.getActualTypeArguments()[0]);</span>
+
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">        if (isCapturingTypeVariablesForbidden()) {</span>
+<span class="fc" id="L103">          verifyNoTypeVariable(typeArgument);</span>
+        }
+<span class="fc" id="L105">        return typeArgument;</span>
+      }
+<span class="nc" id="L107">    }</span>
+    // Check for raw TypeToken as superclass
+<span class="nc bnc" id="L109" title="All 2 branches missed.">    else if (superclass == TypeToken.class) {</span>
+<span class="nc" id="L110">      throw new IllegalStateException(</span>
+          &quot;TypeToken must be created with a type argument: new TypeToken&lt;...&gt;() {}; When using code&quot;
+              + &quot; shrinkers (ProGuard, R8, ...) make sure that generic signatures are preserved.&quot;
+              + &quot;\nSee &quot;
+<span class="nc" id="L114">              + TroubleshootingGuide.createUrl(&quot;type-token-raw&quot;));</span>
+    }
+
+    // User created subclass of subclass of TypeToken
+<span class="nc" id="L118">    throw new IllegalStateException(&quot;Must only create direct subclasses of TypeToken&quot;);</span>
+  }
+
+  private static void verifyNoTypeVariable(Type type) {
+<span class="pc bpc" id="L122" title="1 of 2 branches missed.">    if (type instanceof TypeVariable) {</span>
+<span class="nc" id="L123">      TypeVariable&lt;?&gt; typeVariable = (TypeVariable&lt;?&gt;) type;</span>
+<span class="nc" id="L124">      throw new IllegalArgumentException(</span>
+          &quot;TypeToken type argument must not contain a type variable; captured type variable &quot;
+<span class="nc" id="L126">              + typeVariable.getName()</span>
+              + &quot; declared by &quot;
+<span class="nc" id="L128">              + typeVariable.getGenericDeclaration()</span>
+              + &quot;\nSee &quot;
+<span class="nc" id="L130">              + TroubleshootingGuide.createUrl(&quot;typetoken-type-variable&quot;));</span>
+<span class="fc bfc" id="L131" title="All 2 branches covered.">    } else if (type instanceof GenericArrayType) {</span>
+<span class="fc" id="L132">      verifyNoTypeVariable(((GenericArrayType) type).getGenericComponentType());</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">    } else if (type instanceof ParameterizedType) {</span>
+<span class="fc" id="L134">      ParameterizedType parameterizedType = (ParameterizedType) type;</span>
+<span class="fc" id="L135">      Type ownerType = parameterizedType.getOwnerType();</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">      if (ownerType != null) {</span>
+<span class="fc" id="L137">        verifyNoTypeVariable(ownerType);</span>
+      }
+
+<span class="fc bfc" id="L140" title="All 2 branches covered.">      for (Type typeArgument : parameterizedType.getActualTypeArguments()) {</span>
+<span class="fc" id="L141">        verifyNoTypeVariable(typeArgument);</span>
+      }
+<span class="fc bfc" id="L143" title="All 2 branches covered.">    } else if (type instanceof WildcardType) {</span>
+<span class="fc" id="L144">      WildcardType wildcardType = (WildcardType) type;</span>
+<span class="pc bpc" id="L145" title="1 of 2 branches missed.">      for (Type bound : wildcardType.getLowerBounds()) {</span>
+<span class="nc" id="L146">        verifyNoTypeVariable(bound);</span>
+      }
+<span class="fc bfc" id="L148" title="All 2 branches covered.">      for (Type bound : wildcardType.getUpperBounds()) {</span>
+<span class="fc" id="L149">        verifyNoTypeVariable(bound);</span>
+      }
+<span class="pc bpc" id="L151" title="1 of 2 branches missed.">    } else if (type == null) {</span>
+      // Occurs in Eclipse IDE and certain Java versions (e.g. Java 11.0.18) when capturing type
+      // variable declared by method of local class, see
+      // https://github.com/eclipse-jdt/eclipse.jdt.core/issues/975
+<span class="nc" id="L155">      throw new IllegalArgumentException(</span>
+          &quot;TypeToken captured `null` as type argument; probably a compiler / runtime bug&quot;);
+    }
+<span class="fc" id="L158">  }</span>
+
+  /** Returns the raw (non-generic) type for this type. */
+  public final Class&lt;? super T&gt; getRawType() {
+<span class="fc" id="L162">    return rawType;</span>
+  }
+
+  /** Gets underlying {@code Type} instance. */
+  public final Type getType() {
+<span class="fc" id="L167">    return type;</span>
+  }
+
+  /**
+   * Check if this type is assignable from the given class object.
+   *
+   * @deprecated this implementation may be inconsistent with javac for types with wildcards.
+   */
+  @Deprecated
+  public boolean isAssignableFrom(Class&lt;?&gt; cls) {
+<span class="nc" id="L177">    return isAssignableFrom((Type) cls);</span>
+  }
+
+  /**
+   * Check if this type is assignable from the given Type.
+   *
+   * @deprecated this implementation may be inconsistent with javac for types with wildcards.
+   */
+  @Deprecated
+  public boolean isAssignableFrom(Type from) {
+<span class="nc bnc" id="L187" title="All 2 branches missed.">    if (from == null) {</span>
+<span class="nc" id="L188">      return false;</span>
+    }
+
+<span class="nc bnc" id="L191" title="All 2 branches missed.">    if (type.equals(from)) {</span>
+<span class="nc" id="L192">      return true;</span>
+    }
+
+<span class="nc bnc" id="L195" title="All 2 branches missed.">    if (type instanceof Class&lt;?&gt;) {</span>
+<span class="nc" id="L196">      return rawType.isAssignableFrom($Gson$Types.getRawType(from));</span>
+<span class="nc bnc" id="L197" title="All 2 branches missed.">    } else if (type instanceof ParameterizedType) {</span>
+<span class="nc" id="L198">      return isAssignableFrom(from, (ParameterizedType) type, new HashMap&lt;String, Type&gt;());</span>
+<span class="nc bnc" id="L199" title="All 2 branches missed.">    } else if (type instanceof GenericArrayType) {</span>
+<span class="nc bnc" id="L200" title="All 2 branches missed.">      return rawType.isAssignableFrom($Gson$Types.getRawType(from))</span>
+<span class="nc bnc" id="L201" title="All 2 branches missed.">          &amp;&amp; isAssignableFrom(from, (GenericArrayType) type);</span>
+    } else {
+<span class="nc" id="L203">      throw buildUnsupportedTypeException(</span>
+          type, Class.class, ParameterizedType.class, GenericArrayType.class);
+    }
+  }
+
+  /**
+   * Check if this type is assignable from the given type token.
+   *
+   * @deprecated this implementation may be inconsistent with javac for types with wildcards.
+   */
+  @Deprecated
+  public boolean isAssignableFrom(TypeToken&lt;?&gt; token) {
+<span class="nc" id="L215">    return isAssignableFrom(token.getType());</span>
+  }
+
+  /**
+   * Private helper function that performs some assignability checks for the provided
+   * GenericArrayType.
+   */
+  private static boolean isAssignableFrom(Type from, GenericArrayType to) {
+<span class="nc" id="L223">    Type toGenericComponentType = to.getGenericComponentType();</span>
+<span class="nc bnc" id="L224" title="All 2 branches missed.">    if (toGenericComponentType instanceof ParameterizedType) {</span>
+<span class="nc" id="L225">      Type t = from;</span>
+<span class="nc bnc" id="L226" title="All 2 branches missed.">      if (from instanceof GenericArrayType) {</span>
+<span class="nc" id="L227">        t = ((GenericArrayType) from).getGenericComponentType();</span>
+<span class="nc bnc" id="L228" title="All 2 branches missed.">      } else if (from instanceof Class&lt;?&gt;) {</span>
+<span class="nc" id="L229">        Class&lt;?&gt; classType = (Class&lt;?&gt;) from;</span>
+<span class="nc bnc" id="L230" title="All 2 branches missed.">        while (classType.isArray()) {</span>
+<span class="nc" id="L231">          classType = classType.getComponentType();</span>
+        }
+<span class="nc" id="L233">        t = classType;</span>
+      }
+<span class="nc" id="L235">      return isAssignableFrom(</span>
+          t, (ParameterizedType) toGenericComponentType, new HashMap&lt;String, Type&gt;());
+    }
+    // No generic defined on &quot;to&quot;; therefore, return true and let other
+    // checks determine assignability
+<span class="nc" id="L240">    return true;</span>
+  }
+
+  /** Private recursive helper function to actually do the type-safe checking of assignability. */
+  private static boolean isAssignableFrom(
+      Type from, ParameterizedType to, Map&lt;String, Type&gt; typeVarMap) {
+
+<span class="nc bnc" id="L247" title="All 2 branches missed.">    if (from == null) {</span>
+<span class="nc" id="L248">      return false;</span>
+    }
+
+<span class="nc bnc" id="L251" title="All 2 branches missed.">    if (to.equals(from)) {</span>
+<span class="nc" id="L252">      return true;</span>
+    }
+
+    // First figure out the class and any type information.
+<span class="nc" id="L256">    Class&lt;?&gt; clazz = $Gson$Types.getRawType(from);</span>
+<span class="nc" id="L257">    ParameterizedType ptype = null;</span>
+<span class="nc bnc" id="L258" title="All 2 branches missed.">    if (from instanceof ParameterizedType) {</span>
+<span class="nc" id="L259">      ptype = (ParameterizedType) from;</span>
+    }
+
+    // Load up parameterized variable info if it was parameterized.
+<span class="nc bnc" id="L263" title="All 2 branches missed.">    if (ptype != null) {</span>
+<span class="nc" id="L264">      Type[] tArgs = ptype.getActualTypeArguments();</span>
+<span class="nc" id="L265">      TypeVariable&lt;?&gt;[] tParams = clazz.getTypeParameters();</span>
+<span class="nc bnc" id="L266" title="All 2 branches missed.">      for (int i = 0; i &lt; tArgs.length; i++) {</span>
+<span class="nc" id="L267">        Type arg = tArgs[i];</span>
+<span class="nc" id="L268">        TypeVariable&lt;?&gt; var = tParams[i];</span>
+<span class="nc bnc" id="L269" title="All 2 branches missed.">        while (arg instanceof TypeVariable&lt;?&gt;) {</span>
+<span class="nc" id="L270">          TypeVariable&lt;?&gt; v = (TypeVariable&lt;?&gt;) arg;</span>
+<span class="nc" id="L271">          arg = typeVarMap.get(v.getName());</span>
+<span class="nc" id="L272">        }</span>
+<span class="nc" id="L273">        typeVarMap.put(var.getName(), arg);</span>
+      }
+
+      // check if they are equivalent under our current mapping.
+<span class="nc bnc" id="L277" title="All 2 branches missed.">      if (typeEquals(ptype, to, typeVarMap)) {</span>
+<span class="nc" id="L278">        return true;</span>
+      }
+    }
+
+<span class="nc bnc" id="L282" title="All 2 branches missed.">    for (Type itype : clazz.getGenericInterfaces()) {</span>
+<span class="nc bnc" id="L283" title="All 2 branches missed.">      if (isAssignableFrom(itype, to, new HashMap&lt;&gt;(typeVarMap))) {</span>
+<span class="nc" id="L284">        return true;</span>
+      }
+    }
+
+    // Interfaces didn't work, try the superclass.
+<span class="nc" id="L289">    Type sType = clazz.getGenericSuperclass();</span>
+<span class="nc" id="L290">    return isAssignableFrom(sType, to, new HashMap&lt;&gt;(typeVarMap));</span>
+  }
+
+  /**
+   * Checks if two parameterized types are exactly equal, under the variable replacement described
+   * in the typeVarMap.
+   */
+  private static boolean typeEquals(
+      ParameterizedType from, ParameterizedType to, Map&lt;String, Type&gt; typeVarMap) {
+<span class="nc bnc" id="L299" title="All 2 branches missed.">    if (from.getRawType().equals(to.getRawType())) {</span>
+<span class="nc" id="L300">      Type[] fromArgs = from.getActualTypeArguments();</span>
+<span class="nc" id="L301">      Type[] toArgs = to.getActualTypeArguments();</span>
+<span class="nc bnc" id="L302" title="All 2 branches missed.">      for (int i = 0; i &lt; fromArgs.length; i++) {</span>
+<span class="nc bnc" id="L303" title="All 2 branches missed.">        if (!matches(fromArgs[i], toArgs[i], typeVarMap)) {</span>
+<span class="nc" id="L304">          return false;</span>
+        }
+      }
+<span class="nc" id="L307">      return true;</span>
+    }
+<span class="nc" id="L309">    return false;</span>
+  }
+
+  private static IllegalArgumentException buildUnsupportedTypeException(
+      Type token, Class&lt;?&gt;... expected) {
+
+    // Build exception message
+<span class="nc" id="L316">    StringBuilder exceptionMessage = new StringBuilder(&quot;Unsupported type, expected one of: &quot;);</span>
+<span class="nc bnc" id="L317" title="All 2 branches missed.">    for (Class&lt;?&gt; clazz : expected) {</span>
+<span class="nc" id="L318">      exceptionMessage.append(clazz.getName()).append(&quot;, &quot;);</span>
+    }
+<span class="nc" id="L320">    exceptionMessage</span>
+<span class="nc" id="L321">        .append(&quot;but got: &quot;)</span>
+<span class="nc" id="L322">        .append(token.getClass().getName())</span>
+<span class="nc" id="L323">        .append(&quot;, for type token: &quot;)</span>
+<span class="nc" id="L324">        .append(token.toString());</span>
+
+<span class="nc" id="L326">    return new IllegalArgumentException(exceptionMessage.toString());</span>
+  }
+
+  /**
+   * Checks if two types are the same or are equivalent under a variable mapping given in the type
+   * map that was provided.
+   */
+  private static boolean matches(Type from, Type to, Map&lt;String, Type&gt; typeMap) {
+<span class="nc bnc" id="L334" title="All 4 branches missed.">    return to.equals(from)</span>
+        || (from instanceof TypeVariable
+<span class="nc bnc" id="L336" title="All 2 branches missed.">            &amp;&amp; to.equals(typeMap.get(((TypeVariable&lt;?&gt;) from).getName())));</span>
+  }
+
+  @Override
+  public final int hashCode() {
+<span class="fc" id="L341">    return this.hashCode;</span>
+  }
+
+  @Override
+  public final boolean equals(Object o) {
+<span class="pc bpc" id="L346" title="1 of 4 branches missed.">    return o instanceof TypeToken&lt;?&gt; &amp;&amp; $Gson$Types.equals(type, ((TypeToken&lt;?&gt;) o).type);</span>
+  }
+
+  @Override
+  public final String toString() {
+<span class="fc" id="L351">    return $Gson$Types.typeToString(type);</span>
+  }
+
+  /** Gets type literal for the given {@code Type} instance. */
+  public static TypeToken&lt;?&gt; get(Type type) {
+<span class="fc" id="L356">    return new TypeToken&lt;&gt;(type);</span>
+  }
+
+  /** Gets type literal for the given {@code Class} instance. */
+  public static &lt;T&gt; TypeToken&lt;T&gt; get(Class&lt;T&gt; type) {
+<span class="fc" id="L361">    return new TypeToken&lt;&gt;(type);</span>
+  }
+
+  /**
+   * Gets a type literal for the parameterized type represented by applying {@code typeArguments} to
+   * {@code rawType}. This is mainly intended for situations where the type arguments are not
+   * available at compile time. The following example shows how a type token for {@code Map&lt;K, V&gt;}
+   * can be created:
+   *
+   * &lt;pre&gt;{@code
+   * Class&lt;K&gt; keyClass = ...;
+   * Class&lt;V&gt; valueClass = ...;
+   * TypeToken&lt;?&gt; mapTypeToken = TypeToken.getParameterized(Map.class, keyClass, valueClass);
+   * }&lt;/pre&gt;
+   *
+   * As seen here the result is a {@code TypeToken&lt;?&gt;}; this method cannot provide any type-safety,
+   * and care must be taken to pass in the correct number of type arguments.
+   *
+   * &lt;p&gt;If {@code rawType} is a non-generic class and no type arguments are provided, this method
+   * simply delegates to {@link #get(Class)} and creates a {@code TypeToken(Class)}.
+   *
+   * @throws IllegalArgumentException If {@code rawType} is not of type {@code Class}, or if the
+   *     type arguments are invalid for the raw type
+   */
+  public static TypeToken&lt;?&gt; getParameterized(Type rawType, Type... typeArguments) {
+<span class="nc" id="L386">    Objects.requireNonNull(rawType);</span>
+<span class="nc" id="L387">    Objects.requireNonNull(typeArguments);</span>
+
+    // Perform basic validation here because this is the only public API where users
+    // can create malformed parameterized types
+<span class="nc bnc" id="L391" title="All 2 branches missed.">    if (!(rawType instanceof Class)) {</span>
+      // See also https://bugs.openjdk.org/browse/JDK-8250659
+<span class="nc" id="L393">      throw new IllegalArgumentException(&quot;rawType must be of type Class, but was &quot; + rawType);</span>
+    }
+<span class="nc" id="L395">    Class&lt;?&gt; rawClass = (Class&lt;?&gt;) rawType;</span>
+<span class="nc" id="L396">    TypeVariable&lt;?&gt;[] typeVariables = rawClass.getTypeParameters();</span>
+
+<span class="nc" id="L398">    int expectedArgsCount = typeVariables.length;</span>
+<span class="nc" id="L399">    int actualArgsCount = typeArguments.length;</span>
+<span class="nc bnc" id="L400" title="All 2 branches missed.">    if (actualArgsCount != expectedArgsCount) {</span>
+<span class="nc" id="L401">      throw new IllegalArgumentException(</span>
+<span class="nc" id="L402">          rawClass.getName()</span>
+              + &quot; requires &quot;
+              + expectedArgsCount
+              + &quot; type arguments, but got &quot;
+              + actualArgsCount);
+    }
+
+    // For legacy reasons create a TypeToken(Class) if the type is not generic
+<span class="nc bnc" id="L410" title="All 2 branches missed.">    if (typeArguments.length == 0) {</span>
+<span class="nc" id="L411">      return get(rawClass);</span>
+    }
+
+    // Check for this here to avoid misleading exception thrown by ParameterizedTypeImpl
+<span class="nc bnc" id="L415" title="All 2 branches missed.">    if ($Gson$Types.requiresOwnerType(rawType)) {</span>
+<span class="nc" id="L416">      throw new IllegalArgumentException(</span>
+          &quot;Raw type &quot;
+<span class="nc" id="L418">              + rawClass.getName()</span>
+              + &quot; is not supported because it requires specifying an owner type&quot;);
+    }
+
+<span class="nc bnc" id="L422" title="All 2 branches missed.">    for (int i = 0; i &lt; expectedArgsCount; i++) {</span>
+<span class="nc" id="L423">      Type typeArgument =</span>
+<span class="nc" id="L424">          Objects.requireNonNull(typeArguments[i], &quot;Type argument must not be null&quot;);</span>
+<span class="nc" id="L425">      Class&lt;?&gt; rawTypeArgument = $Gson$Types.getRawType(typeArgument);</span>
+<span class="nc" id="L426">      TypeVariable&lt;?&gt; typeVariable = typeVariables[i];</span>
+
+<span class="nc bnc" id="L428" title="All 2 branches missed.">      for (Type bound : typeVariable.getBounds()) {</span>
+<span class="nc" id="L429">        Class&lt;?&gt; rawBound = $Gson$Types.getRawType(bound);</span>
+
+<span class="nc bnc" id="L431" title="All 2 branches missed.">        if (!rawBound.isAssignableFrom(rawTypeArgument)) {</span>
+<span class="nc" id="L432">          throw new IllegalArgumentException(</span>
+              &quot;Type argument &quot;
+                  + typeArgument
+                  + &quot; does not satisfy bounds for type variable &quot;
+                  + typeVariable
+                  + &quot; declared by &quot;
+                  + rawType);
+        }
+      }
+    }
+
+<span class="nc" id="L443">    return new TypeToken&lt;&gt;(</span>
+<span class="nc" id="L444">        $Gson$Types.newParameterizedTypeWithOwner(null, rawClass, typeArguments));</span>
+  }
+
+  /**
+   * Gets type literal for the array type whose elements are all instances of {@code componentType}.
+   */
+  public static TypeToken&lt;?&gt; getArray(Type componentType) {
+<span class="nc" id="L451">    return new TypeToken&lt;&gt;($Gson$Types.arrayOf(componentType));</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

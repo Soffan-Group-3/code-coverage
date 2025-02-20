@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FieldNamingPolicy.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson</a> &gt; <span class="el_source">FieldNamingPolicy.java</span></div><h1>FieldNamingPolicy.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2008 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson;
+
+import java.lang.reflect.Field;
+import java.util.Locale;
+
+/**
+ * An enumeration that defines a few standard naming conventions for JSON field names. This
+ * enumeration should be used in conjunction with {@link com.google.gson.GsonBuilder} to configure a
+ * {@link com.google.gson.Gson} instance to properly translate Java field names into the desired
+ * JSON field names.
+ *
+ * @author Inderjeet Singh
+ * @author Joel Leitch
+ */
+<span class="fc" id="L31">public enum FieldNamingPolicy implements FieldNamingStrategy {</span>
+
+  /** Using this naming policy with Gson will ensure that the field name is unchanged. */
+<span class="fc" id="L34">  IDENTITY() {</span>
+    @Override
+    public String translateName(Field f) {
+<span class="fc" id="L37">      return f.getName();</span>
+    }
+  },
+
+  /**
+   * Using this naming policy with Gson will ensure that the first &quot;letter&quot; of the Java field name
+   * is capitalized when serialized to its JSON form.
+   *
+   * &lt;p&gt;Here are a few examples of the form &quot;Java Field Name&quot; ---&amp;gt; &quot;JSON Field Name&quot;:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;someFieldName ---&amp;gt; SomeFieldName
+   *   &lt;li&gt;_someFieldName ---&amp;gt; _SomeFieldName
+   * &lt;/ul&gt;
+   */
+<span class="fc" id="L52">  UPPER_CAMEL_CASE() {</span>
+    @Override
+    public String translateName(Field f) {
+<span class="fc" id="L55">      return upperCaseFirstLetter(f.getName());</span>
+    }
+  },
+
+  /**
+   * Using this naming policy with Gson will ensure that the first &quot;letter&quot; of the Java field name
+   * is capitalized when serialized to its JSON form and the words will be separated by a space.
+   *
+   * &lt;p&gt;Here are a few examples of the form &quot;Java Field Name&quot; ---&amp;gt; &quot;JSON Field Name&quot;:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;someFieldName ---&amp;gt; Some Field Name
+   *   &lt;li&gt;_someFieldName ---&amp;gt; _Some Field Name
+   * &lt;/ul&gt;
+   *
+   * @since 1.4
+   */
+<span class="fc" id="L72">  UPPER_CAMEL_CASE_WITH_SPACES() {</span>
+    @Override
+    public String translateName(Field f) {
+<span class="fc" id="L75">      return upperCaseFirstLetter(separateCamelCase(f.getName(), ' '));</span>
+    }
+  },
+
+  /**
+   * Using this naming policy with Gson will modify the Java Field name from its camel cased form to
+   * an upper case field name where each word is separated by an underscore (_).
+   *
+   * &lt;p&gt;Here are a few examples of the form &quot;Java Field Name&quot; ---&amp;gt; &quot;JSON Field Name&quot;:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;someFieldName ---&amp;gt; SOME_FIELD_NAME
+   *   &lt;li&gt;_someFieldName ---&amp;gt; _SOME_FIELD_NAME
+   *   &lt;li&gt;aStringField ---&amp;gt; A_STRING_FIELD
+   *   &lt;li&gt;aURL ---&amp;gt; A_U_R_L
+   * &lt;/ul&gt;
+   *
+   * @since 2.9.0
+   */
+<span class="fc" id="L94">  UPPER_CASE_WITH_UNDERSCORES() {</span>
+    @Override
+    public String translateName(Field f) {
+<span class="fc" id="L97">      return separateCamelCase(f.getName(), '_').toUpperCase(Locale.ENGLISH);</span>
+    }
+  },
+
+  /**
+   * Using this naming policy with Gson will modify the Java Field name from its camel cased form to
+   * a lower case field name where each word is separated by an underscore (_).
+   *
+   * &lt;p&gt;Here are a few examples of the form &quot;Java Field Name&quot; ---&amp;gt; &quot;JSON Field Name&quot;:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;someFieldName ---&amp;gt; some_field_name
+   *   &lt;li&gt;_someFieldName ---&amp;gt; _some_field_name
+   *   &lt;li&gt;aStringField ---&amp;gt; a_string_field
+   *   &lt;li&gt;aURL ---&amp;gt; a_u_r_l
+   * &lt;/ul&gt;
+   */
+<span class="fc" id="L114">  LOWER_CASE_WITH_UNDERSCORES() {</span>
+    @Override
+    public String translateName(Field f) {
+<span class="fc" id="L117">      return separateCamelCase(f.getName(), '_').toLowerCase(Locale.ENGLISH);</span>
+    }
+  },
+
+  /**
+   * Using this naming policy with Gson will modify the Java Field name from its camel cased form to
+   * a lower case field name where each word is separated by a dash (-).
+   *
+   * &lt;p&gt;Here are a few examples of the form &quot;Java Field Name&quot; ---&amp;gt; &quot;JSON Field Name&quot;:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;someFieldName ---&amp;gt; some-field-name
+   *   &lt;li&gt;_someFieldName ---&amp;gt; _some-field-name
+   *   &lt;li&gt;aStringField ---&amp;gt; a-string-field
+   *   &lt;li&gt;aURL ---&amp;gt; a-u-r-l
+   * &lt;/ul&gt;
+   *
+   * Using dashes in JavaScript is not recommended since dash is also used for a minus sign in
+   * expressions. This requires that a field named with dashes is always accessed as a quoted
+   * property like {@code myobject['my-field']}. Accessing it as an object field {@code
+   * myobject.my-field} will result in an unintended JavaScript expression.
+   *
+   * @since 1.4
+   */
+<span class="fc" id="L141">  LOWER_CASE_WITH_DASHES() {</span>
+    @Override
+    public String translateName(Field f) {
+<span class="fc" id="L144">      return separateCamelCase(f.getName(), '-').toLowerCase(Locale.ENGLISH);</span>
+    }
+  },
+
+  /**
+   * Using this naming policy with Gson will modify the Java Field name from its camel cased form to
+   * a lower case field name where each word is separated by a dot (.).
+   *
+   * &lt;p&gt;Here are a few examples of the form &quot;Java Field Name&quot; ---&amp;gt; &quot;JSON Field Name&quot;:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;someFieldName ---&amp;gt; some.field.name
+   *   &lt;li&gt;_someFieldName ---&amp;gt; _some.field.name
+   *   &lt;li&gt;aStringField ---&amp;gt; a.string.field
+   *   &lt;li&gt;aURL ---&amp;gt; a.u.r.l
+   * &lt;/ul&gt;
+   *
+   * Using dots in JavaScript is not recommended since dot is also used for a member sign in
+   * expressions. This requires that a field named with dots is always accessed as a quoted property
+   * like {@code myobject['my.field']}. Accessing it as an object field {@code myobject.my.field}
+   * will result in an unintended JavaScript expression.
+   *
+   * @since 2.8.4
+   */
+<span class="fc" id="L168">  LOWER_CASE_WITH_DOTS() {</span>
+    @Override
+    public String translateName(Field f) {
+<span class="fc" id="L171">      return separateCamelCase(f.getName(), '.').toLowerCase(Locale.ENGLISH);</span>
+    }
+  };
+
+  /**
+   * Converts the field name that uses camel-case define word separation into separate words that
+   * are separated by the provided {@code separator}.
+   */
+  static String separateCamelCase(String name, char separator) {
+<span class="fc" id="L180">    StringBuilder translation = new StringBuilder();</span>
+<span class="fc bfc" id="L181" title="All 2 branches covered.">    for (int i = 0, length = name.length(); i &lt; length; i++) {</span>
+<span class="fc" id="L182">      char character = name.charAt(i);</span>
+<span class="fc bfc" id="L183" title="All 4 branches covered.">      if (Character.isUpperCase(character) &amp;&amp; translation.length() != 0) {</span>
+<span class="fc" id="L184">        translation.append(separator);</span>
+      }
+<span class="fc" id="L186">      translation.append(character);</span>
+    }
+<span class="fc" id="L188">    return translation.toString();</span>
+  }
+
+  /** Ensures the JSON field names begins with an upper case letter. */
+  static String upperCaseFirstLetter(String s) {
+<span class="fc" id="L193">    int length = s.length();</span>
+<span class="fc bfc" id="L194" title="All 2 branches covered.">    for (int i = 0; i &lt; length; i++) {</span>
+<span class="fc" id="L195">      char c = s.charAt(i);</span>
+<span class="fc bfc" id="L196" title="All 2 branches covered.">      if (Character.isLetter(c)) {</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">        if (Character.isUpperCase(c)) {</span>
+<span class="fc" id="L198">          return s;</span>
+        }
+
+<span class="fc" id="L201">        char uppercased = Character.toUpperCase(c);</span>
+        // For leading letter only need one substring
+<span class="fc bfc" id="L203" title="All 2 branches covered.">        if (i == 0) {</span>
+<span class="fc" id="L204">          return uppercased + s.substring(1);</span>
+        } else {
+<span class="fc" id="L206">          return s.substring(0, i) + uppercased + s.substring(i + 1);</span>
+        }
+      }
+    }
+
+<span class="fc" id="L211">    return s;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

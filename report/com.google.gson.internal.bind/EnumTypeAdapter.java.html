@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EnumTypeAdapter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson.internal.bind</a> &gt; <span class="el_source">EnumTypeAdapter.java</span></div><h1>EnumTypeAdapter.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2024 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson.internal.bind;
+
+import com.google.gson.Gson;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.annotations.SerializedName;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
+import java.io.IOException;
+import java.lang.reflect.AccessibleObject;
+import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+
+/** Adapter for enum classes (but not for the base class {@code java.lang.Enum}). */
+class EnumTypeAdapter&lt;T extends Enum&lt;T&gt;&gt; extends TypeAdapter&lt;T&gt; {
+<span class="fc" id="L36">  static final TypeAdapterFactory FACTORY =</span>
+<span class="fc" id="L37">      new TypeAdapterFactory() {</span>
+        @Override
+        public &lt;T&gt; TypeAdapter&lt;T&gt; create(Gson gson, TypeToken&lt;T&gt; typeToken) {
+<span class="fc" id="L40">          Class&lt;? super T&gt; rawType = typeToken.getRawType();</span>
+<span class="pc bpc" id="L41" title="1 of 4 branches missed.">          if (!Enum.class.isAssignableFrom(rawType) || rawType == Enum.class) {</span>
+<span class="fc" id="L42">            return null;</span>
+          }
+<span class="fc bfc" id="L44" title="All 2 branches covered.">          if (!rawType.isEnum()) {</span>
+<span class="fc" id="L45">            rawType = rawType.getSuperclass(); // handle anonymous subclasses</span>
+          }
+          @SuppressWarnings({&quot;rawtypes&quot;, &quot;unchecked&quot;})
+<span class="fc" id="L48">          TypeAdapter&lt;T&gt; adapter = (TypeAdapter&lt;T&gt;) new EnumTypeAdapter(rawType);</span>
+<span class="fc" id="L49">          return adapter;</span>
+        }
+      };
+
+<span class="fc" id="L53">  private final Map&lt;String, T&gt; nameToConstant = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L54">  private final Map&lt;String, T&gt; stringToConstant = new HashMap&lt;&gt;();</span>
+<span class="fc" id="L55">  private final Map&lt;T, String&gt; constantToName = new HashMap&lt;&gt;();</span>
+
+<span class="fc" id="L57">  private EnumTypeAdapter(Class&lt;T&gt; classOfT) {</span>
+    try {
+      // Uses reflection to find enum constants to work around name mismatches for obfuscated
+      // classes
+<span class="fc" id="L61">      Field[] fields = classOfT.getDeclaredFields();</span>
+<span class="fc" id="L62">      int constantCount = 0;</span>
+<span class="fc bfc" id="L63" title="All 2 branches covered.">      for (Field f : fields) {</span>
+        // Filter out non-constant fields, replacing elements as we go
+<span class="fc bfc" id="L65" title="All 2 branches covered.">        if (f.isEnumConstant()) {</span>
+<span class="fc" id="L66">          fields[constantCount++] = f;</span>
+        }
+      }
+
+      // Trim the array to the new length. Every enum type can be expected to have at least
+      // one declared field which is not an enum constant, namely the implicit $VALUES array
+<span class="fc" id="L72">      fields = Arrays.copyOf(fields, constantCount);</span>
+
+<span class="fc" id="L74">      AccessibleObject.setAccessible(fields, true);</span>
+
+<span class="fc bfc" id="L76" title="All 2 branches covered.">      for (Field constantField : fields) {</span>
+        @SuppressWarnings(&quot;unchecked&quot;)
+<span class="fc" id="L78">        T constant = (T) constantField.get(null);</span>
+<span class="fc" id="L79">        String name = constant.name();</span>
+<span class="fc" id="L80">        String toStringVal = constant.toString();</span>
+
+<span class="fc" id="L82">        SerializedName annotation = constantField.getAnnotation(SerializedName.class);</span>
+<span class="fc bfc" id="L83" title="All 2 branches covered.">        if (annotation != null) {</span>
+<span class="fc" id="L84">          name = annotation.value();</span>
+<span class="pc bpc" id="L85" title="1 of 2 branches missed.">          for (String alternate : annotation.alternate()) {</span>
+<span class="nc" id="L86">            nameToConstant.put(alternate, constant);</span>
+          }
+        }
+<span class="fc" id="L89">        nameToConstant.put(name, constant);</span>
+<span class="fc" id="L90">        stringToConstant.put(toStringVal, constant);</span>
+<span class="fc" id="L91">        constantToName.put(constant, name);</span>
+      }
+<span class="nc" id="L93">    } catch (IllegalAccessException e) {</span>
+      // IllegalAccessException should be impossible due to the `setAccessible` call above;
+      // and even that should probably not fail since enum constants are implicitly public
+<span class="nc" id="L96">      throw new AssertionError(e);</span>
+<span class="fc" id="L97">    }</span>
+<span class="fc" id="L98">  }</span>
+
+  @Override
+  public T read(JsonReader in) throws IOException {
+<span class="pc bpc" id="L102" title="1 of 2 branches missed.">    if (in.peek() == JsonToken.NULL) {</span>
+<span class="nc" id="L103">      in.nextNull();</span>
+<span class="nc" id="L104">      return null;</span>
+    }
+<span class="fc" id="L106">    String key = in.nextString();</span>
+<span class="fc" id="L107">    T constant = nameToConstant.get(key);</span>
+    // Note: If none of the approaches find the constant, this returns null
+<span class="fc bfc" id="L109" title="All 2 branches covered.">    return (constant == null) ? stringToConstant.get(key) : constant;</span>
+  }
+
+  @Override
+  public void write(JsonWriter out, T value) throws IOException {
+<span class="pc bpc" id="L114" title="1 of 2 branches missed.">    out.value(value == null ? null : constantToName.get(value));</span>
+<span class="fc" id="L115">  }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>

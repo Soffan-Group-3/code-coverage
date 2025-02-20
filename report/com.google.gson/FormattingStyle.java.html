@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="sv"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>FormattingStyle.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Gson</a> &gt; <a href="index.source.html" class="el_package">com.google.gson</a> &gt; <span class="el_source">FormattingStyle.java</span></div><h1>FormattingStyle.java</h1><pre class="source lang-java linenums">/*
+ * Copyright (C) 2022 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.google.gson;
+
+import com.google.gson.stream.JsonWriter;
+import java.util.Objects;
+
+/**
+ * A class used to control what the serialization output looks like.
+ *
+ * &lt;p&gt;It currently has the following configuration methods, but more methods might be added in the
+ * future:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;{@link #withNewline(String)}
+ *   &lt;li&gt;{@link #withIndent(String)}
+ *   &lt;li&gt;{@link #withSpaceAfterSeparators(boolean)}
+ * &lt;/ul&gt;
+ *
+ * @see GsonBuilder#setFormattingStyle(FormattingStyle)
+ * @see JsonWriter#setFormattingStyle(FormattingStyle)
+ * @see &lt;a href=&quot;https://en.wikipedia.org/wiki/Newline&quot;&gt;Wikipedia Newline article&lt;/a&gt;
+ * @since 2.11.0
+ */
+public class FormattingStyle {
+  private final String newline;
+  private final String indent;
+  private final boolean spaceAfterSeparators;
+
+  /**
+   * The default compact formatting style:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;no newline
+   *   &lt;li&gt;no indent
+   *   &lt;li&gt;no space after {@code ','} and {@code ':'}
+   * &lt;/ul&gt;
+   */
+<span class="fc" id="L53">  public static final FormattingStyle COMPACT = new FormattingStyle(&quot;&quot;, &quot;&quot;, false);</span>
+
+  /**
+   * The default pretty printing formatting style:
+   *
+   * &lt;ul&gt;
+   *   &lt;li&gt;{@code &quot;\n&quot;} as newline
+   *   &lt;li&gt;two spaces as indent
+   *   &lt;li&gt;a space between {@code ':'} and the subsequent value
+   * &lt;/ul&gt;
+   */
+<span class="fc" id="L64">  public static final FormattingStyle PRETTY = new FormattingStyle(&quot;\n&quot;, &quot;  &quot;, true);</span>
+
+<span class="fc" id="L66">  private FormattingStyle(String newline, String indent, boolean spaceAfterSeparators) {</span>
+<span class="fc" id="L67">    Objects.requireNonNull(newline, &quot;newline == null&quot;);</span>
+<span class="fc" id="L68">    Objects.requireNonNull(indent, &quot;indent == null&quot;);</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">    if (!newline.matches(&quot;[\r\n]*&quot;)) {</span>
+<span class="fc" id="L70">      throw new IllegalArgumentException(</span>
+          &quot;Only combinations of \\n and \\r are allowed in newline.&quot;);
+    }
+<span class="fc bfc" id="L73" title="All 2 branches covered.">    if (!indent.matches(&quot;[ \t]*&quot;)) {</span>
+<span class="fc" id="L74">      throw new IllegalArgumentException(</span>
+          &quot;Only combinations of spaces and tabs are allowed in indent.&quot;);
+    }
+<span class="fc" id="L77">    this.newline = newline;</span>
+<span class="fc" id="L78">    this.indent = indent;</span>
+<span class="fc" id="L79">    this.spaceAfterSeparators = spaceAfterSeparators;</span>
+<span class="fc" id="L80">  }</span>
+
+  /**
+   * Creates a {@link FormattingStyle} with the specified newline setting.
+   *
+   * &lt;p&gt;It can be used to accommodate certain OS convention, for example hardcode {@code &quot;\n&quot;} for
+   * Linux and macOS, {@code &quot;\r\n&quot;} for Windows, or call {@link java.lang.System#lineSeparator()}
+   * to match the current OS.
+   *
+   * &lt;p&gt;Only combinations of {@code \n} and {@code \r} are allowed.
+   *
+   * @param newline the string value that will be used as newline.
+   * @return a newly created {@link FormattingStyle}
+   * @see #getNewline()
+   */
+  public FormattingStyle withNewline(String newline) {
+<span class="fc" id="L96">    return new FormattingStyle(newline, this.indent, this.spaceAfterSeparators);</span>
+  }
+
+  /**
+   * Creates a {@link FormattingStyle} with the specified indent string.
+   *
+   * &lt;p&gt;Only combinations of spaces and tabs are allowed in indent.
+   *
+   * @param indent the string value that will be used as indent.
+   * @return a newly created {@link FormattingStyle}
+   * @see #getIndent()
+   */
+  public FormattingStyle withIndent(String indent) {
+<span class="fc" id="L109">    return new FormattingStyle(this.newline, indent, this.spaceAfterSeparators);</span>
+  }
+
+  /**
+   * Creates a {@link FormattingStyle} which either uses a space after the separators {@code ','}
+   * and {@code ':'} in the JSON output, or not.
+   *
+   * &lt;p&gt;This setting has no effect on the {@linkplain #withNewline(String) configured newline}. If a
+   * non-empty newline is configured, it will always be added after {@code ','} and no space is
+   * added after the {@code ','} in that case.
+   *
+   * @param spaceAfterSeparators whether to output a space after {@code ','} and {@code ':'}.
+   * @return a newly created {@link FormattingStyle}
+   * @see #usesSpaceAfterSeparators()
+   */
+  public FormattingStyle withSpaceAfterSeparators(boolean spaceAfterSeparators) {
+<span class="fc" id="L125">    return new FormattingStyle(this.newline, this.indent, spaceAfterSeparators);</span>
+  }
+
+  /**
+   * Returns the string value that will be used as a newline.
+   *
+   * @return the newline value.
+   * @see #withNewline(String)
+   */
+  public String getNewline() {
+<span class="fc" id="L135">    return this.newline;</span>
+  }
+
+  /**
+   * Returns the string value that will be used as indent.
+   *
+   * @return the indent value.
+   * @see #withIndent(String)
+   */
+  public String getIndent() {
+<span class="fc" id="L145">    return this.indent;</span>
+  }
+
+  /**
+   * Returns whether a space will be used after {@code ','} and {@code ':'}.
+   *
+   * @see #withSpaceAfterSeparators(boolean)
+   */
+  public boolean usesSpaceAfterSeparators() {
+<span class="fc" id="L154">    return this.spaceAfterSeparators;</span>
+  }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.8.202204050719</span></div></body></html>
