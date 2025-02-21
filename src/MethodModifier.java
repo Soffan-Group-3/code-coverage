@@ -57,6 +57,8 @@ public class MethodModifier {
             "import java.io.BufferedWriter;\n" +
             "import java.io.PrintWriter;\n" +
             "import java.io.IOException;\n";
+	
+	private static HashMap<Integer, String> branches = new HashMap<Integer,String>();
 
     public static void main(String[] args) throws IOException, InterruptedException {
     	
@@ -65,6 +67,8 @@ public class MethodModifier {
             System.out.println("Usage: java MethodModifier <ClassName>;<MethodName_1>:<MethodName_2> <ClassName_2>;<MethodName_1>:<MethodName_2>\"");
             return;
         }
+        Files.createFile(Paths.get("branch_results.txt"));
+        File resultFile = new File("branch_results.txt");
         List<String> classes = new ArrayList<String>();
         for(String arg: args) {
             // Convert each String arg to char array
@@ -79,6 +83,7 @@ public class MethodModifier {
         		   new ProcessBuilder("mvn", "clean", "verify");
         
         //pb.redirectErrorStream(true);
+        pb.redirectErrorStream(true);
         Process process = pb.start();
 
         process.waitFor(10, TimeUnit.MINUTES);
@@ -87,14 +92,14 @@ public class MethodModifier {
         	String className = classes.get(i);
         	String sourceFilePath = className + ".java";
         	String copyFilePath = className + "_Modified.tmp";
-        	String content = new String(Files.readAllBytes(Paths.get(sourceFilePath)));
+        	String content = new String(Files.readAllBytes(Paths.get(copyFilePath)));
         	
             Files.write(Paths.get(sourceFilePath), content.getBytes());
             Files.deleteIfExists(Paths.get(copyFilePath));
         }
         
         
-        File resultFile = new File("branch_results.txt");
+        
         Scanner resultReader = new Scanner(resultFile);
         
         HashMap<Integer, Integer> resultingBranches = new HashMap<>();
@@ -108,12 +113,17 @@ public class MethodModifier {
         resultingBranches.forEach((key,value) -> System.out.println(key + " " + value));
         
         Files.deleteIfExists(Paths.get("branch_results.txt"));
-        
-        for(int i = 0; i < 73; i++) {
+        int untested = 0;
+        for(int i = 1; i < id; i++) {
         	if (!resultingBranches.containsKey(i)) {
         		System.out.println(i + " has missing tests");
+        		System.out.println("Specific branch is: " + branches.get(i));
+        		untested++;
         	}
         }
+        
+        System.out.println("Untested branches was: " + untested);
+        System.out.println("This is " + (double) untested / (double)(id+1));
         
 
     }
@@ -126,7 +136,7 @@ public class MethodModifier {
             String modifiedContent = content;
             Files.copy(Paths.get(sourceFilePath), Paths.get(copyFilePath), StandardCopyOption.REPLACE_EXISTING);
             for (String method : methods) {
-            	modifiedContent = modifyMethod(modifiedContent, method);
+            	modifiedContent = modifyMethod(modifiedContent, method, className);
                 System.out.println("Method '" + method + "' modified successfully in the file: " + sourceFilePath);
 
             }
@@ -163,7 +173,7 @@ public class MethodModifier {
         return modifiedContent;
     }
 
-    public static String modifyMethod(String content, String methodName) {
+    public static String modifyMethod(String content, String methodName, String className) {
         // Find the method signature
     	int methodStartIndex = -1;
     	int counter = 0;
@@ -202,6 +212,11 @@ public class MethodModifier {
         	newmethod.append(splitBody[i]+"\n");
         	if (isBranch(splitBody[i])) {
         		id += 1;
+        		if (i < splitBody.length - 1) {
+        			branches.put(id, "In class: " + className + ", in method: " + methodName + ", code: " + splitBody[i] + splitBody[i+1]);
+        		}else {
+        			branches.put(id, "In class: " + className + ", in method: " + methodName + ", code: " + splitBody[i]);
+        		}
         		newmethod.append("addBranchResult("+id+");\n");
         	}
             
