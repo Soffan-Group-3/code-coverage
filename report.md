@@ -272,10 +272,10 @@ It also does not check for ternary operations or for thrown `errors`.
 
 ## Coverage improvement
 
-# Hanna
-I have analyzed the function parse(), found @./gson/src/main/java/com/google/gson/internal/bind/util/ISO8601Utils. This is one of the functions with highest code complexity and the Lizard tool shows a CCN of 30 and a length of 185.
+### Hanna
+I have analyzed the function parse(), found @./gson/src/main/java/com/google/gson/internal/bind/util/ISO8601Utils.
 
-Analyzed with my own coverage tool the test cases that visits 11 out of 22 possible branches. This corresponds to a branch coverage of 50%. Three tests were added to the unit tests for the function, testDateParseInvalidTimezone(), testDateParseMismatched Timezone() and testDateParseLeapSecondWithMilliseconds(). With the new tests a total of 17 was visited branches, which gives a coverage of 77%.
+Analyzed with my own coverage tool, the test cases visits 11 out of 22 possible branches. This corresponds to a branch coverage of 50%. Three tests were added to the unit tests for the function, testDateParseInvalidTimezone(), testDateParseMismatchedTimezone() and testDateParseLeapSecondWithMilliseconds(). With the new tests a total of 17 branched was visited, which gives a coverage of 77%.
 
 ## Self assessment
 We have been working together for a few weeks and have established a solid way of working, meeting all the criteria for the In Place stage. The entire team actively uses our agreed practices and tools. We primarily use Slack for communication and a GitHub repository to store and collaborate on code, as agreed from the start. We use GitHub Issues and continuous commits to coordinate smoothly.
