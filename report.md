@@ -1,4 +1,12 @@
-# Report
+# Report for assignment 3
+
+## Project
+
+Name: GSON
+
+URL: [https://github.com/google/gson](https://github.com/google/gson)
+
+Gson is a Java library that can be used to convert Java Objects into their JSON representation. It can also be used to convert a JSON string to an equivalent Java object.
 
 ## Onboarding experience
 
@@ -235,15 +243,15 @@ Estimated impact of refactoring (lower CC, but other drawbacks?).
 Refactoring would result in better code readability and structure. It would also promote a more collaborative environment through better code structure. Creating help methods would lower CC as each method would be smaller, hence less decision points in general. However, creating more methods also creates longer classes with more code. To conclude the result of refactoring, lower CC leads to higher Loc. 
 
 
+## Coverage
 
-
-## Ad-hoc coverage-tool
+### Ad-hoc coverage-tool
 
 An ad-hoc coverage tool was implemented. Found here in src.
 
 This tool is very simple, both in functionality and use.
 
-### Building
+#### Building
 
 Simply run in the `src` directory: 
 
@@ -251,19 +259,53 @@ Simply run in the `src` directory:
 javac *.java
 ```
 
-### Running
+#### Running
 
 ```
 java MethodModifier <classname>-<method>:<method> <classname>-<method>:<method>
 ```
 
-### Functionality
+When the code runs it starts with the first method in the first class.
+
+
+##### Example of modified ´doPeek()´
+
+When running the program one can for example exhibit the following behaviour in the ´doPeek´ method in the ´JsonReader´ class.
+
+Before the code is modified the function will look something like:
+![image](resources/noInserts.PNG)
+
+First the method will be updated to look something like:
+![image](resources/exampleAdd.png)
+
+Then the static fields and functions will be imported:
+![image](resources/addedStatic.PNG)
+
+###### Compilation
+
+Now all of the code will be compiled, and then tested with ´mvn clean verify´
+
+Then when the relevant methods are called during the testing, the textfile will be populated. It can for example look like the following:
+
+![image](resources/txtfile.png)
+
+###### Reading results
+
+After ´mvn´ have finished running the changed files are reverted to their original form, and the ´temp´ file is removed.
+
+After this the program will go through the text file and check all the times a branch was accessed. Then it will output all branches that are not tested during the tests.
+
+This can look like the following:
+
+![image](resources/results.PNG)
+
+#### Functionality
 
 The java program automatically injects code at places where the code may branch. This is for example ´if´, ´else´ and ´switch´ statements. But also places like ´for´ and ´while´. Each of these places will get an unique ´ID´ (for this run). If the relevant branch is ran in execution, then the injected code will also add that ´ID´ to a ´txt´ file.
 
 After all tests are done, the program can simply go through the entire file and check if there is any ID that does not appear in the ´txt´ file. If this is the case then that branch has not been tested. This then prints the relevant branching instruction. 
 
-### Where does it miss
+#### Where does it miss
 
 This does not check all possible branches. For example if there is a ´if´ statement that returns, it is not checked if the code after this statement is also reached. Which can be good. This is a simple fix, we simply have to tell where the ´if´ statement ends and add another check there.
 
@@ -271,6 +313,16 @@ It also does not check for ternary operations or for thrown `errors`.
 
 
 ## Coverage improvement
+
+The coverage between our new tests was:
+
+![image](resources/codeBefore.PNG)
+
+The coverage after our new tests was:
+
+![image](resources/codeAfter.PNG)
+
+Where we can see that there has been an significant increase in the code and branch coverage!
 
 ### Hanna
 I have analyzed the function parse(), found @./gson/src/main/java/com/google/gson/internal/bind/util/ISO8601Utils.
