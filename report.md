@@ -333,3 +333,14 @@ Analyzed with my own coverage tool, the test cases visits 11 out of 22 possible 
 We have been working together for a few weeks and have established a solid way of working, meeting all the criteria for the In Place stage. The entire team actively uses our agreed practices and tools. We primarily use Slack for communication and a GitHub repository to store and collaborate on code, as agreed from the start. We use GitHub Issues and continuous commits to coordinate smoothly.
 
 Our meeting structure supports both independent work and team discussions when needed. We have a mix of scheduled meetings and short notice check-ins, which has worked well. As a result, our way of working meets most of the Working Well criteria. Overall, we are very satisfied with our workflow. Moving forward, we aim to further integrate and streamline our processes. In previous tasks, we successfully used our tools and continuously integrated our work into GitHub. However, due to the short time frame, this task was more challenging, and we aim to furter improve our usage of some tools, such as github issues, for the next assignment.
+
+
+### Improvement on Cyclomatic complexity
+
+The cyclomatic complexity of the `doPeek()` was previously:
+
+![image](resources/beforeLizard.PNG)
+
+After improvements this became: 
+
+![image](resources/afterLizard.PNG)
