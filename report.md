@@ -29,7 +29,7 @@ However, since there are ´122´ tests files (and over 4000 tests) compiling goe
 
 ## Cyclomatic complexity
 
-##Complexity
+### Complexity
 Cyclomatic complexity is essentially a was to analyze and quantify a programs control flow. For example if the code contains no control flow statements, the cyclomatic complexity would be 1. Thus a way to define cyclomatic complexity is to create a control flow graph with the “blocks” in the program as nodes with directed edges between them if control can flow from one to the other. Cyclomatic complexity is then M = E-N + 2P, where E is edges in the graph, N is nodes in the graph and P are number of connected components.
 
 
@@ -49,7 +49,7 @@ peekKeyword()
 skipValue()
 .\gson\src\main\java\com\google\gson\stream\JsonReader.java
 
-###Decision points
+#### Decision points
 if
 else if
 for
@@ -58,7 +58,7 @@ switch
 catch
 Logical operators (&&, ||)
 
-###READ
+#### READ
 User 1:
 Loc: 45
 CC: 11
@@ -79,7 +79,7 @@ catch:
 ||:
 
 
-###PARSE
+#### PARSE
 User 1:
 Loc: 117
 CC: 30
@@ -98,7 +98,7 @@ Switch-cases: 214, 217
 Catch: 297
 Logical operators (&&, ||): 178, 201, 203, 240, 249, 303
 
-###doPeek
+#### doPeek
 User 1:
 Loc: 125
 CC: 41
@@ -118,7 +118,7 @@ catch:
 &&: 65.
 ||: 18, 65, 99.
 
-###peekKeyword
+#### peekKeyword
 User 1:
 Loc: 38
 CC: 16
@@ -138,7 +138,7 @@ Switch-cases:
 Catch:
 Logical operators (&&, ||): 728, 732, 736, 750, 754, 760
 
-###skipValue
+#### skipValue
 User 1:
 Loc: 65
 CC: 19
@@ -163,19 +163,19 @@ Logical operators (&&, ||):
 Generally the functions with higher CC have more lines of code. So generally they are not just complex but also long. However read() and peekKeyword() are exceptions to this, since peekKeyword() is shorter than read() but has higher CC.
 
 3. What is the purpose of the functions?
-###READ
+##### READ
 Reads a JSON structure from a JsonReader and converts it into a JsonElement. It also handles nested JSON elements using a stack. It optimizes this by using JsonTreeReader.
 
-###PARSE
+##### PARSE
 Parses a date string into a Date object. It handles edge cases such as leap seconds, incomplete time zones and input validation. 
 
-###DOPEEK
+##### DOPEEK
 Examines the next token in the input stream which allows the parser to determine what type the next coming JSON element is. It can handle various JSON structures and syntax rules for formats that are non standard for JSON. 
 
-###PEEKKEYWORD
+##### PEEKKEYWORD
 This function checks if the current position in the buffer matches a JSON keyword like true, false or null. It also handles case sensitivity based on how something is parsed, strict vs lenient. If a match is found and it is followed by a non-literal character the method moves the buffer position and returns a constant. 
 
-###SKIPVALUE
+##### SKIPVALUE
 Skips over a JSON value without parsing the content. Maintains the internal state of the JSON parser by updating stack levels and path indices. 
 
 4. Are exceptions taken into account in the given measurements?
@@ -187,10 +187,10 @@ No, Some functions does not have any clear documentation and are missing Javadoc
 
 
 ### Refactor into smaller functions (decrease complexity)
-## Refactoring
+#### Refactoring
 Plan for refactoring complex code:
 
-###READ
+##### READ
 For the read method it is possible to break the method into 4 separate methods.
 JsonElement tryBeginNesting(JsonReader in, JsonToken peeked)
 Checks if the current JsonToken points to the beginning of a nested JSON structure. If it does, it will initiate the corresponding nesting.
@@ -204,11 +204,11 @@ This method would add the parsed value to the current JSON container. If it is a
 JsonElement getNextValue(JsonReader in, JsonToken peeked)
 This method would determine the next value to be processed by either starting a new nesting structure or reading a terminal value. It would centralize the token selection process which would improve readability and maintainability. 
 
-###PARSE
+##### PARSE
 In order to refactor this code, we can extract the extractYear, extractMonth and extractDay methods. This would reduce the repetition in the code and make it easier to maintain. 
 Extracting the hasTimeComponent would also improve readability. Same goes for extractTime method, which would create a reduced nesting level in the main method. Extracting extractTimeZone method would also make the parsing flow cleaner. Finally extracting the createCalendar and handleParseExecution methods would greatly improve core maintainability and repetitive behaviours. 
 
-###DOPEEK
+##### #DOPEEK
 Refactoring this method would include extracting a range of helper methods. This includes:
 void handleEmptyArray()
 void handleNonEmptyArray()
@@ -220,10 +220,10 @@ int handleDefaultCases(int peekStack, int c)
 
 This would reduce the size of the doPeek() method and would make the code easier to maintain. The readability would also become much better. 
 
-###PEEKKEYWORD
+##### PEEKKEYWORD
 In order to refactor this method, we would firstly have to extract the helper methods. This would include separating the keyword matching logic into individual helper methods. We could also introduce an enum, which would allow us to eliminate repressive if-else conditions. Finally, we could also move the check logic into a separate method, for instance: (boolean isInvalidLiteral(int length)).
 
-###SKIPVALUE
+##### SKIPVALUE
 To refactor this code, we can extract help methods. We could break the switch cases into help methods such as handleBeginArray(), handleBeginObject(), handleEndArray(), handleEndObject(), and handleQuotedOrUnquotedName(). This would isolate the responsibilities of each code part and reduce cyclomatic complexity in the main method. We could also remove the duplicate logic by creating an updatingPathNames() method that can be used in multiple instances in the code to update path names. This would greatly reduce repetition in the code. 
 
 
