@@ -29,7 +29,213 @@ However, since there are ´122´ tests files (and over 4000 tests) compiling goe
 
 ## Cyclomatic complexity
 
+### Complexity
+Cyclomatic complexity is essentially a was to analyze and quantify a programs control flow. For example if the code contains no control flow statements, the cyclomatic complexity would be 1. Thus a way to define cyclomatic complexity is to create a control flow graph with the “blocks” in the program as nodes with directed edges between them if control can flow from one to the other. Cyclomatic complexity is then M = E-N + 2P, where E is edges in the graph, N is nodes in the graph and P are number of connected components.
+
+
+1. What are your results for five complex functions?
+   * Did all methods (tools vs. manual count) get the same result?
+   * Are the results clear?
+
+We choose five methods from the gson/src directory:
+read(JsonReader in)
+.\gson\src\main\java\com\google\gson\internal\bind\JsonElementTypeAdapter.java
+parse(String date, ParsePosition pos)
+File path: .\gson\src\main\java\com\google\gson\internal\bind\util\ISO8601Utils.java 
+doPeek()
+.\gson\src\main\java\com\google\gson\stream\JsonReader.java
+peekKeyword()
+.\gson\src\main\java\com\google\gson\stream\JsonReader.java
+skipValue()
+.\gson\src\main\java\com\google\gson\stream\JsonReader.java
+
+#### Decision points
+if
+else if
+for
+while
+switch
+catch
+Logical operators (&&, ||)
+
+#### READ
+User 1:
+Loc: 45
+CC: 11
+Manual CC: 13
+User 2:
+Loc: 45
+CC: 11
+Manual CC: 13
+Conclusion: No difference found, clear results.
+Decision points (line numbers):
+if: 79, 88, 98, 106, 110, 116, 123, 129.
+else if: 112, 125, 131.
+for:
+while: 94, 95.
+switch:
+catch:
+&&:
+||:
+
+
+#### PARSE
+User 1:
+Loc: 117
+CC: 30
+Manual CC: 30
+User 2:
+Loc: 117
+CC: 30
+Manual CC: 30
+Conclusion: No difference found, clear results.
+Decision points (line numbers):
+If-statements:   154, 160, 178 186, 190, 195, 199, 203, 207, 230, 237, 249, 262, 269, 302
+Else/Else-if: 240, 251, 278
+For:
+While:
+Switch-cases: 214, 217
+Catch: 297
+Logical operators (&&, ||): 178, 201, 203, 240, 249, 303
+
+#### doPeek
+User 1:
+Loc: 125
+CC: 41
+Manual CC: 44
+User 2:
+Loc: 125
+CC: 41
+Manual CC: 44
+Conclusion: No difference found, clear results.
+Decision points (line numbers):
+if: 3, 21, 42, 50, 65, 73, 79, 92, 99, 120, 125, 129.
+else if: 5, 18, 44, 52, 56, 72, 77, 81, 85, 103.
+for: 
+while: 
+switch: 8, 23, 35, 60, 90.
+catch: 
+&&: 65.
+||: 18, 65, 99.
+
+#### peekKeyword
+User 1:
+Loc: 38
+CC: 16
+Manual CC:  17
+User 2:
+Loc: 38
+CC: 16
+Manual CC: 17
+Conclusion: No difference found, clear results.
+
+Decision points (line numbers):
+If-statements:   728, 750, 755, 760
+Else/Else-if: 732, 736, 740
+For: 749, 
+While:
+Switch-cases:
+Catch:
+Logical operators (&&, ||): 728, 732, 736, 750, 754, 760
+
+#### skipValue
+User 1:
+Loc: 65
+CC: 19
+Manual CC:  18
+User 2:
+Loc: 65
+CC: 19
+Manual CC: 18
+Conclusion: No difference found, clear results.
+
+Decision points (line numbers):
+If-statements:    1378, 1398, 1417, 1424, 1431
+Else/Else-if: 
+For:
+do/While: 1376
+Switch-cases: 1383, 1387, 1391, 1395, 1405, 1408, 1411, 1414, 1421, 1428, 1435, 1438, 
+Catch:
+Logical operators (&&, ||): 
+
+
+2. Are the functions just complex, or also long?
+Generally the functions with higher CC have more lines of code. So generally they are not just complex but also long. However read() and peekKeyword() are exceptions to this, since peekKeyword() is shorter than read() but has higher CC.
+
+3. What is the purpose of the functions?
+##### READ
+Reads a JSON structure from a JsonReader and converts it into a JsonElement. It also handles nested JSON elements using a stack. It optimizes this by using JsonTreeReader.
+
+##### PARSE
+Parses a date string into a Date object. It handles edge cases such as leap seconds, incomplete time zones and input validation. 
+
+##### DOPEEK
+Examines the next token in the input stream which allows the parser to determine what type the next coming JSON element is. It can handle various JSON structures and syntax rules for formats that are non standard for JSON. 
+
+##### PEEKKEYWORD
+This function checks if the current position in the buffer matches a JSON keyword like true, false or null. It also handles case sensitivity based on how something is parsed, strict vs lenient. If a match is found and it is followed by a non-literal character the method moves the buffer position and returns a constant. 
+
+##### SKIPVALUE
+Skips over a JSON value without parsing the content. Maintains the internal state of the JSON parser by updating stack levels and path indices. 
+
+4. Are exceptions taken into account in the given measurements?
+Yes, we have counted catch statements in our CC measurements. However, lizard does not take catch statements into account, hence the lizard CC being slightly lower than the manual CC for some methods.
+
+5. Is the documentation clear w.r.t. all the possible outcomes?
+No, Some functions does not have any clear documentation and are missing Javadoc. For example, read(), peekKeyword(), doPeek() all are missing javadoc documentation. They only contain simple one-line comments in some places of the code. 
+
+
+
 ### Refactor into smaller functions (decrease complexity)
+#### Refactoring
+Plan for refactoring complex code:
+
+##### READ
+For the read method it is possible to break the method into 4 separate methods.
+JsonElement tryBeginNesting(JsonReader in, JsonToken peeked)
+Checks if the current JsonToken points to the beginning of a nested JSON structure. If it does, it will initiate the corresponding nesting.
+
+JsonElement readTerminal(JsonReader in, JsonToken peeked)
+This method would read a terminal value from the JSON and map the JsonToken to the corresponding JsonElement.
+
+void processValue(JsonElement current, String name, JsonElement value)
+This method would add the parsed value to the current JSON container. If it is a JsonArray, it is added as a named member using the name. 
+
+JsonElement getNextValue(JsonReader in, JsonToken peeked)
+This method would determine the next value to be processed by either starting a new nesting structure or reading a terminal value. It would centralize the token selection process which would improve readability and maintainability. 
+
+##### PARSE
+In order to refactor this code, we can extract the extractYear, extractMonth and extractDay methods. This would reduce the repetition in the code and make it easier to maintain. 
+Extracting the hasTimeComponent would also improve readability. Same goes for extractTime method, which would create a reduced nesting level in the main method. Extracting extractTimeZone method would also make the parsing flow cleaner. Finally extracting the createCalendar and handleParseExecution methods would greatly improve core maintainability and repetitive behaviours. 
+
+##### #DOPEEK
+Refactoring this method would include extracting a range of helper methods. This includes:
+void handleEmptyArray()
+void handleNonEmptyArray()
+void handleEmptyOrNonEmptyObject(int peekStack)
+void handleDanglingName()
+void handleEmptyDocument()
+void handleNonEmptyDocument()
+int handleDefaultCases(int peekStack, int c)
+
+This would reduce the size of the doPeek() method and would make the code easier to maintain. The readability would also become much better. 
+
+##### PEEKKEYWORD
+In order to refactor this method, we would firstly have to extract the helper methods. This would include separating the keyword matching logic into individual helper methods. We could also introduce an enum, which would allow us to eliminate repressive if-else conditions. Finally, we could also move the check logic into a separate method, for instance: (boolean isInvalidLiteral(int length)).
+
+##### SKIPVALUE
+To refactor this code, we can extract help methods. We could break the switch cases into help methods such as handleBeginArray(), handleBeginObject(), handleEndArray(), handleEndObject(), and handleQuotedOrUnquotedName(). This would isolate the responsibilities of each code part and reduce cyclomatic complexity in the main method. We could also remove the duplicate logic by creating an updatingPathNames() method that can be used in multiple instances in the code to update path names. This would greatly reduce repetition in the code. 
+
+
+
+Generally one can refactor the code by splitting the “subfunctionality” into separate functions, this would make the code much easier to read and understand. However it could also come with negative effects in terms of how easy it is to read. Refactoring the code into helper functions will require a lot more “jumping about” to read the code. Also one should consider whether it is worth refactoring the helper functions if the functions are only used in 1 or very few places. 
+
+
+Estimated impact of refactoring (lower CC, but other drawbacks?).
+Refactoring would result in better code readability and structure. It would also promote a more collaborative environment through better code structure. Creating help methods would lower CC as each method would be smaller, hence less decision points in general. However, creating more methods also creates longer classes with more code. To conclude the result of refactoring, lower CC leads to higher Loc. 
+
+
+
 
 ## Ad-hoc coverage-tool
 
