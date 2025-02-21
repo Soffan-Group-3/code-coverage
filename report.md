@@ -2,6 +2,31 @@
 
 ## Onboarding experience
 
+### Did you have to install a lot of additional tools to build the software?
+
+The only other software that was needed was ´maven´ (´mvn´). Most java devlopers should already have this though.
+
+### Were those tools well documented?
+
+
+Most tools are pretty well documented. There is a lot of javadoc about how to use the tools that GSON provides. 
+
+However, most other things like settings, ´pom´ files and structure of files have been much harder to work with. For example, the ´pom´ files make it so that all ´warnings´ are treated as ´errors´. This made the manual DIY-ing very hard.
+
+### Were other components installed automatically by the build script?
+
+Yes since maven is used a lot of other dependencies are downloaded.
+
+### Did the build conclude automatically without errors?
+
+If you ran the project with `mvn clean verify` it did, however ´mvn clean test´ did not work. 
+
+### How well do examples and tests run on your system(s)?
+
+It can be quite hard to get everything to work. A lot of things had to be removed from different `pom` files or ´config´ files, however, when this is done it runs pretty good.
+
+However, since there are ´122´ tests files (and over 4000 tests) compiling goes pretty slow.
+
 ## Cyclomatic complexity
 
 ### Refactor into smaller functions (decrease complexity)
