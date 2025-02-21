@@ -343,4 +343,4 @@ The cyclomatic complexity of the `doPeek()` was previously:
 
 After improvements this became: 
 
-![image](resources/afterLizard.PNG)
+![image](resources/afterLizard.png)
